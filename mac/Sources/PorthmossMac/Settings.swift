@@ -1,0 +1,70 @@
+import Foundation
+import PorthmossCore
+
+/// User-facing configuration, persisted as JSON so it stays hand-editable
+/// while there is no settings UI yet.
+struct Settings {
+    var agentHost = ""
+    var agentPort: UInt16 = 47654
+    var clientName = Host.current().localizedName ?? "Mac"
+
+    var capture = CaptureConfig()
+    var modifiers = ModifierMapping.default
+
+    /// macOS already applies "natural scrolling" before we see the event, so
+    /// this is only for people who want the Windows side to differ.
+    var invertScroll = false
+    /// How much trackpad movement makes one Windows wheel notch.
+    var pixelsPerNotch = 12.0
+
+    static var fileURL: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return base.appendingPathComponent("Porthmoss/settings.json")
+    }
+
+    static func load() -> Settings {
+        var settings = Settings()
+        guard let data = try? Data(contentsOf: fileURL),
+              let stored = try? JSONDecoder().decode(Stored.self, from: data)
+        else { return settings }
+
+        settings.agentHost = stored.agentHost ?? settings.agentHost
+        settings.agentPort = stored.agentPort ?? settings.agentPort
+        settings.clientName = stored.clientName ?? settings.clientName
+        settings.invertScroll = stored.invertScroll ?? settings.invertScroll
+        settings.pixelsPerNotch = stored.pixelsPerNotch ?? settings.pixelsPerNotch
+        if let edge = stored.edge.flatMap(ScreenEdge.init(rawValue:)) { settings.capture.edge = edge }
+        if let value = stored.sensitivity { settings.capture.sensitivity = value }
+        if let value = stored.pushThreshold { settings.capture.pushThreshold = value }
+        if stored.passthroughModifiers == true { settings.modifiers = .passthrough }
+        return settings
+    }
+
+    func save() throws {
+        let stored = Stored(
+            agentHost: agentHost, agentPort: agentPort, clientName: clientName,
+            edge: capture.edge.rawValue, sensitivity: capture.sensitivity,
+            pushThreshold: capture.pushThreshold, invertScroll: invertScroll,
+            pixelsPerNotch: pixelsPerNotch, passthroughModifiers: nil
+        )
+        let url = Settings.fileURL
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(stored).write(to: url, options: .atomic)
+    }
+
+    private struct Stored: Codable {
+        var agentHost: String?
+        var agentPort: UInt16?
+        var clientName: String?
+        var edge: String?
+        var sensitivity: Double?
+        var pushThreshold: Double?
+        var invertScroll: Bool?
+        var pixelsPerNotch: Double?
+        var passthroughModifiers: Bool?
+    }
+}

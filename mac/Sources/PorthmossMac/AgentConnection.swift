@@ -1,0 +1,289 @@
+import CryptoKit
+import Foundation
+import Network
+import PorthmossCore
+
+/// The Mac's end of the link: a pinned TLS connection to the Windows agent.
+///
+/// The agent's certificate is self-signed, so the usual PKI checks are
+/// meaningless. Instead we pin its SHA-256 fingerprint on first pairing and
+/// refuse anything else afterwards — an unauthenticated input channel is total
+/// remote control of the PC, so this is the load-bearing part.
+final class AgentConnection: @unchecked Sendable {
+    enum State: Sendable {
+        case idle, connecting, needsPairingCode, ready, failed(String)
+    }
+
+    private let connection: NWConnection
+    private let queue = DispatchQueue(label: "app.porthmoss.connection")
+    private var inbound = Data()
+    private var pendingPong: @Sendable (UInt64) -> Void = { _ in }
+
+    /// The fingerprint the server actually presented, captured during the TLS
+    /// handshake so pairing can salt with it.
+    private var presentedFingerprint: Data?
+    private let pinnedFingerprint: Data?
+
+    private(set) var screens: RemoteScreens?
+
+    var onStateChange: @Sendable (State) -> Void = { _ in }
+    var onDisconnect: @Sendable (String) -> Void = { _ in }
+
+    init(host: String, port: UInt16, pinnedFingerprint: Data?) {
+        self.pinnedFingerprint = pinnedFingerprint
+
+        let tls = NWProtocolTLS.Options()
+        sec_protocol_options_set_min_tls_protocol_version(tls.securityProtocolOptions, .TLSv13)
+
+        let box = FingerprintBox()
+        sec_protocol_options_set_verify_block(
+            tls.securityProtocolOptions,
+            { _, trustRef, complete in
+                guard let chain = SecTrustCopyCertificateChain(sec_trust_copy_ref(trustRef).takeRetainedValue()),
+                      CFArrayGetCount(chain) > 0
+                else { return complete(false) }
+
+                let cert = unsafeBitCast(CFArrayGetValueAtIndex(chain, 0), to: SecCertificate.self)
+                let der = SecCertificateCopyData(cert) as Data
+                let fingerprint = Data(SHA256.hash(data: der))
+                box.value = fingerprint
+
+                if let pinned = box.pinned {
+                    // Constant-time compare: a fingerprint mismatch means a
+                    // different machine is answering, and we must not connect.
+                    let matches = constantTimeEquals(pinned, fingerprint)
+                    box.rejectedPin = !matches
+                    complete(matches)
+                } else {
+                    // First pairing: trust on first use, then show the user the
+                    // fingerprint so they can confirm which PC they just trusted.
+                    complete(true)
+                }
+            },
+            queue
+        )
+        box.pinned = pinnedFingerprint
+        self.fingerprintBox = box
+
+        let params = NWParameters(tls: tls, tcp: {
+            let tcp = NWProtocolTCP.Options()
+            // Input events are tiny and latency-critical; Nagle would batch
+            // them into visible cursor stutter.
+            tcp.noDelay = true
+            tcp.connectionTimeout = 5
+            return tcp
+        }())
+
+        connection = NWConnection(
+            host: NWEndpoint.Host(host),
+            port: NWEndpoint.Port(rawValue: port)!,
+            using: params
+        )
+    }
+
+    private let fingerprintBox: FingerprintBox
+
+    /// Turns a TLS-layer failure into something a user can act on. A rejected
+    /// pin is the security-relevant case and must never read as a generic
+    /// network hiccup.
+    private func explain(_ error: NWError) -> Error {
+        guard fingerprintBox.rejectedPin else { return error }
+        let presented = fingerprintBox.value.map(hex) ?? "unknown"
+        return WireError.rejected("""
+        the PC at this address presented a different certificate than the one \
+        this Mac paired with.
+
+          expected: \(pinnedFingerprint.map(hex) ?? "none")
+          received: \(presented)
+
+        That happens if the agent's state was reset — or if something else is \
+        answering on that address. If you reset the agent yourself, run \
+        `porthmoss --host <addr> --unpair` and pair again. If you did not, do \
+        not pair: nothing on that address should be trusted with your keyboard.
+        """)
+    }
+
+    /// Connects and completes the handshake. `codeProvider` is asked for the
+    /// 6-digit pairing code only when the agent says it has never been paired.
+    func start(
+        clientName: String,
+        storedSecret: Data?,
+        codeProvider: @escaping @Sendable () -> String?,
+        completion: @escaping @Sendable (Result<(RemoteScreens, Data, Data), Error>) -> Void
+    ) {
+        onStateChange(.connecting)
+        connection.stateUpdateHandler = { [weak self] state in
+            guard let self else { return }
+            switch state {
+            case .ready:
+                self.handshake(
+                    clientName: clientName,
+                    storedSecret: storedSecret,
+                    codeProvider: codeProvider,
+                    completion: completion
+                )
+            case let .failed(error):
+                completion(.failure(self.explain(error)))
+            case let .waiting(error):
+                // Usually the agent is not running or a firewall is in the way.
+                completion(.failure(self.explain(error)))
+            default:
+                break
+            }
+        }
+        connection.start(queue: queue)
+    }
+
+    func stop() {
+        connection.cancel()
+    }
+
+    // MARK: - Handshake
+
+    private func handshake(
+        clientName: String,
+        storedSecret: Data?,
+        codeProvider: @escaping @Sendable () -> String?,
+        completion: @escaping @Sendable (Result<(RemoteScreens, Data, Data), Error>) -> Void
+    ) {
+        do {
+            try sendFrame(.hello, Wire.helloBody(name: clientName))
+        } catch {
+            return completion(.failure(error))
+        }
+
+        readFrame { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case let .failure(error):
+                completion(.failure(error))
+            case let .success(frame):
+                guard frame.type == Wire.MessageType.challenge.rawValue else {
+                    return completion(.failure(WireError.rejected("expected CHALLENGE from agent")))
+                }
+                do {
+                    let (nonce, needsPairing) = try Wire.decodeChallenge(frame.body)
+                    guard let fingerprint = self.fingerprintBox.value else {
+                        return completion(.failure(WireError.rejected("no certificate presented")))
+                    }
+
+                    let secret: Data
+                    if needsPairing {
+                        self.onStateChange(.needsPairingCode)
+                        guard let code = codeProvider() else {
+                            return completion(.failure(WireError.rejected("pairing cancelled")))
+                        }
+                        secret = Pairing.deriveSecret(code: code, fingerprint: fingerprint)
+                    } else {
+                        guard let stored = storedSecret else {
+                            return completion(.failure(WireError.rejected(
+                                "this Mac is not paired with that agent — run it with --unpair to start over")))
+                        }
+                        secret = stored
+                    }
+
+                    let proof = Pairing.sign(secret: secret, nonce: Data(nonce))
+                    try self.sendFrame(.auth, [UInt8](proof))
+
+                    self.readFrame { readyResult in
+                        switch readyResult {
+                        case let .failure(error):
+                            completion(.failure(error))
+                        case let .success(ready):
+                            if ready.type == Wire.MessageType.error.rawValue {
+                                let message = String(decoding: ready.body, as: UTF8.self)
+                                return completion(.failure(WireError.rejected(message)))
+                            }
+                            guard ready.type == Wire.MessageType.ready.rawValue else {
+                                return completion(.failure(WireError.rejected("expected READY from agent")))
+                            }
+                            do {
+                                let screens = try RemoteScreens.decode(ready.body)
+                                self.screens = screens
+                                self.onStateChange(.ready)
+                                self.pump()
+                                completion(.success((screens, secret, fingerprint)))
+                            } catch {
+                                completion(.failure(error))
+                            }
+                        }
+                    }
+                } catch {
+                    completion(.failure(error))
+                }
+            }
+        }
+    }
+
+    // MARK: - Sending
+
+    func sendFrame(_ type: Wire.MessageType, _ body: [UInt8] = []) throws {
+        let data = try Wire.frame(type, body)
+        connection.send(content: data, completion: .contentProcessed { [weak self] error in
+            if let error { self?.onDisconnect("send failed: \(error.localizedDescription)") }
+        })
+    }
+
+    /// Fire-and-forget send for the input hot path, where a thrown error would
+    /// only ever mean the connection is already gone.
+    func post(_ type: Wire.MessageType, _ body: [UInt8] = []) {
+        try? sendFrame(type, body)
+    }
+
+    // MARK: - Receiving
+
+    private func readFrame(_ completion: @escaping @Sendable (Result<(type: UInt8, body: [UInt8]), Error>) -> Void) {
+        if let frame = try? Wire.nextFrame(from: &inbound) {
+            return completion(.success(frame))
+        }
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 8192) { [weak self] data, _, isComplete, error in
+            guard let self else { return }
+            if let error { return completion(.failure(error)) }
+            if let data, !data.isEmpty { self.inbound.append(data) }
+            if isComplete, self.inbound.isEmpty {
+                return completion(.failure(WireError.rejected("agent closed the connection")))
+            }
+            self.readFrame(completion)
+        }
+    }
+
+    /// Keeps reading after the handshake, so PONGs arrive and a closed socket
+    /// is noticed promptly.
+    private func pump() {
+        readFrame { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case let .failure(error):
+                self.onDisconnect(error.localizedDescription)
+            case let .success(frame):
+                if frame.type == Wire.MessageType.pong.rawValue,
+                   let id = try? Wire.decodeU64(frame.body) {
+                    self.pendingPong(id)
+                }
+                self.pump()
+            }
+        }
+    }
+
+    func onPong(_ handler: @escaping @Sendable (UInt64) -> Void) {
+        pendingPong = handler
+    }
+}
+
+/// Shuttles the observed certificate fingerprint out of the C verify block.
+private final class FingerprintBox: @unchecked Sendable {
+    var value: Data?
+    var pinned: Data?
+    var rejectedPin = false
+}
+
+private func hex(_ data: Data) -> String {
+    data.map { String(format: "%02x", $0) }.joined()
+}
+
+private func constantTimeEquals(_ a: Data, _ b: Data) -> Bool {
+    guard a.count == b.count else { return false }
+    var difference: UInt8 = 0
+    for (x, y) in zip(a, b) { difference |= x ^ y }
+    return difference == 0
+}

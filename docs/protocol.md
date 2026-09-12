@@ -1,0 +1,82 @@
+# Porthmoss wire protocol v1
+
+Transport: a single TLS 1.3 TCP connection, `TCP_NODELAY` set on both ends.
+The **Windows agent is the TLS server**; the **Mac is the client**. The Mac
+discovers agents over mDNS (`_porthmoss._tcp`) or is pointed at a host:port.
+
+Byte order is **big-endian** throughout. Strings are `u16` length + UTF-8 bytes.
+
+## Framing
+
+Every message is:
+
+    u32 length   (byte count of type + body, max 4096)
+    u8  type
+    ... body
+
+## Trust model
+
+The agent generates a self-signed P-256 certificate on first run and stores it
+under its state dir. The Mac pins the certificate's SHA-256 fingerprint on
+first pairing (TOFU) and refuses to connect if it ever changes.
+
+Pinning alone proves *which* machine you reached, not that the user authorised
+it, so pairing also establishes a 32-byte shared secret. The agent displays a
+6-digit code; the Mac derives
+
+    secret = HKDF-SHA256(ikm = code, salt = server_cert_fingerprint, info = "porthmoss-v1-pairing")
+
+and proves knowledge of it with an HMAC over a server nonce. The secret is
+stored in the macOS Keychain and in the agent's state file; the code is used
+once and discarded.
+
+## Handshake
+
+    Mac  -> Agent   0x01 HELLO      u16 protocol_version, str client_name
+    Mac  <- Agent   0x02 CHALLENGE  [32]byte nonce, u8 needs_pairing
+    Mac  -> Agent   0x03 AUTH       [32]byte hmac_sha256(secret, nonce)
+    Mac  <- Agent   0x04 READY      ScreenInfo
+
+`needs_pairing = 1` means the agent has no stored secret and is showing a code.
+Any auth failure is answered with `0x05 ERROR` and the connection is closed.
+
+### ScreenInfo
+
+    i32 virtual_left, virtual_top, virtual_width, virtual_height
+    u8  monitor_count
+    monitor_count x { i32 left, top, width, height; u8 is_primary }
+
+Coordinates are Windows virtual-desktop pixels. The Mac uses the virtual rect
+to convert its own cursor model into the normalised 0..65535 space below.
+
+## Input messages (Mac -> Agent)
+
+All positions are **absolute**, normalised to the virtual desktop:
+`n = round(65535 * (px - virtual_left) / (virtual_width - 1))`.
+
+Absolute is deliberate: relative deltas get run through Windows' pointer
+acceleration a second time and feel wrong. The Mac owns the cursor position.
+
+    0x10 MOUSE_MOVE    u16 x, u16 y
+    0x11 MOUSE_BUTTON  u8 button (1=L 2=R 3=M 4=X1 5=X2), u8 down
+    0x12 MOUSE_WHEEL   i16 dx, i16 dy      (units of WHEEL_DELTA/120)
+    0x20 KEY           u16 scancode, u8 down, u8 flags (bit0 = extended)
+    0x21 KEY_RESET     -                   (release every key the agent holds)
+
+Key events carry **PS/2 set-1 scancodes**, not virtual key codes, so the
+agent never has to know the Mac's keyboard layout. The Mac is responsible for
+Cmd->Ctrl and other modifier remapping before it gets here.
+
+## Session messages
+
+    0x30 ENTER   u16 x, u16 y   Mac took control; agent shows cursor at x,y
+    0x31 LEAVE   -              Mac released control; agent sends KEY_RESET-equivalent
+    0x40 PING    u64 id         either direction
+    0x41 PONG    u64 id         echo of the id
+
+## Dead-man switch
+
+While the Mac holds control it sends `PING` every 500 ms. If the agent sees no
+message for 2 s it releases every held key and button. If the Mac sees no
+`PONG` for 2 s it releases capture and returns the cursor to the Mac — losing
+Wi-Fi must never leave the user with no cursor on either machine.

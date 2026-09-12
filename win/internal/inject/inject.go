@@ -1,0 +1,24 @@
+// Package inject turns Porthmoss input messages into real OS input events.
+package inject
+
+import "github.com/janjamscikov/porthmoss/win/internal/proto"
+
+// Injector delivers input to the local desktop. Implementations are not
+// required to be safe for concurrent use; the server drives one from a single
+// goroutine.
+type Injector interface {
+	// MoveTo warps the cursor to a normalised 0..65535 point on the virtual desktop.
+	MoveTo(x, y uint16) error
+	// Button presses or releases a mouse button.
+	Button(button byte, down bool) error
+	// Wheel scrolls by whole wheel notches.
+	Wheel(dx, dy int16) error
+	// Key presses or releases a PS/2 set-1 scancode.
+	Key(scancode uint16, down bool, extended bool) error
+	// ReleaseAll releases everything currently held down. It is called on
+	// disconnect, on LEAVE, and when the dead-man switch fires, so a dropped
+	// connection can never leave a key stuck.
+	ReleaseAll() error
+	// Screens reports the current display layout.
+	Screens() (proto.ScreenInfo, error)
+}
