@@ -156,3 +156,68 @@ struct CaptureModelTests {
         #expect(x == 65535)
     }
 }
+
+@Suite("Crossing stability")
+struct CrossingStabilityTests {
+    /// The bug that made the Mac cursor appear to move while driving the PC:
+    /// on arrival the cursor sits against the Windows entry edge, so the return
+    /// gesture was already satisfied. A small leftward jiggle bounced control
+    /// straight back, and the rapid flapping re-warped the Mac cursor each time.
+    @Test("A jiggle right after crossing does not bounce control back")
+    func noImmediateBounce() {
+        let model = makeModel()
+        crossOver(model)
+        #expect(model.isRemote)
+
+        // Exactly what a hand does settling after a push: small movements in
+        // both directions, still hard against the entry edge.
+        for i in 0 ..< 40 {
+            let dx: Double = (i % 2 == 0) ? -6 : 4
+            let action = model.mouseMoved(
+                cursor: Point(x: 0, y: 0), delta: Point(x: dx, y: 1), now: 1.0 + Double(i) * 0.016
+            )
+            if case .returnToLocal = action {
+                Issue.record("control bounced back on a jiggle at step \(i)")
+                return
+            }
+        }
+        #expect(model.isRemote)
+    }
+
+    @Test("Moving left immediately after arriving does not bounce control back")
+    func noBounceOnSustainedLeftward() {
+        let model = makeModel()
+        crossOver(model)
+        // You land pinned against the Windows left edge. Moving left from there
+        // is the most natural thing in the world and must not eject you.
+        for i in 0 ..< 30 {
+            let action = model.mouseMoved(
+                cursor: Point(x: 0, y: 0), delta: Point(x: -8, y: 0), now: 1.0 + Double(i) * 0.016
+            )
+            if case .returnToLocal = action {
+                Issue.record("control bounced back after \(i) leftward movements on arrival")
+                return
+            }
+        }
+        #expect(model.isRemote)
+    }
+
+    /// The escape hatch must still work — but only after actually using the PC.
+    @Test("Returning still works once the cursor has moved into the PC")
+    func returnStillWorksAfterUse() {
+        let model = makeModel()
+        crossOver(model)
+        // Use the PC: move well clear of the entry edge.
+        _ = model.mouseMoved(cursor: Point(x: 0, y: 0), delta: Point(x: 600, y: 200), now: 1.0)
+
+        var returned = false
+        for i in 0 ..< 300 {
+            let action = model.mouseMoved(
+                cursor: Point(x: 0, y: 0), delta: Point(x: -10, y: 0), now: 2.0 + Double(i) * 0.016
+            )
+            if case .returnToLocal = action { returned = true; break }
+        }
+        #expect(returned, "deliberately walking back to the edge must still return control")
+        #expect(!model.isRemote)
+    }
+}

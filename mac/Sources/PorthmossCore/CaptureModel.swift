@@ -35,6 +35,16 @@ public struct CaptureConfig: Sendable {
     /// Scales Mac mouse movement into Windows pixels.
     public var sensitivity: Double = 1.0
 
+    /// How far into the PC's desktop the cursor must travel before pushing
+    /// back can hand control home again.
+    ///
+    /// You arrive pinned against the entry edge, which means the return
+    /// gesture is already satisfied the moment you land — a couple of leftward
+    /// movements would eject you straight back, and the resulting flapping
+    /// looks like the Mac cursor moving on its own. Control only becomes
+    /// returnable once you have actually gone somewhere.
+    public var returnArmDistance: Double = 64
+
     public init() {}
 }
 
@@ -64,6 +74,9 @@ public final class CaptureModel {
 
     private var push: Double = 0
     private var lastPushAt: TimeInterval = 0
+    /// False from the moment control crosses over until the cursor has moved
+    /// `returnArmDistance` clear of the entry edge.
+    private var returnArmed = false
     /// Where on the edge we left, as a 0...1 fraction, so we come back to the
     /// same place instead of jumping to a corner.
     private var exitFraction: Double = 0.5
@@ -86,6 +99,7 @@ public final class CaptureModel {
         guard isRemote else { return nil }
         isRemote = false
         push = 0
+        returnArmed = false
         return .returnToLocal(localPointOnEdge(fraction: exitFraction))
     }
 
@@ -104,6 +118,7 @@ public final class CaptureModel {
 
         push = 0
         isRemote = true
+        returnArmed = false
         exitFraction = edgeFraction(of: cursor)
         remoteCursor = remoteEntryPoint(fraction: exitFraction)
         let (x, y) = normalized(remoteCursor)
@@ -161,9 +176,14 @@ public final class CaptureModel {
         let virtual = screens.virtualDesktop
         let scaled = Point(x: delta.x * config.sensitivity, y: delta.y * config.sensitivity)
 
+        if !returnArmed, distanceFromEntryEdge() >= config.returnArmDistance {
+            returnArmed = true
+        }
+
         // Movement back towards the Mac only counts once the cursor is already
-        // pinned against the entry edge of the Windows desktop.
-        let pinned = isPinnedToEntryEdge()
+        // pinned against the entry edge of the Windows desktop — and only once
+        // it has been somewhere else first.
+        let pinned = returnArmed && isPinnedToEntryEdge()
         let inward = -outwardComponent(of: scaled)
         if pinned, inward > 0 {
             if now - lastPushAt > config.pushWindow { push = 0 }
@@ -195,6 +215,18 @@ public final class CaptureModel {
         case .left: return remoteCursor.x >= Double(virtual.right - 1) - slack
         case .bottom: return remoteCursor.y <= Double(virtual.top) + slack
         case .top: return remoteCursor.y >= Double(virtual.bottom - 1) - slack
+        }
+    }
+
+    /// How far the cursor has travelled into the PC's desktop, measured from
+    /// the edge it arrived through.
+    private func distanceFromEntryEdge() -> Double {
+        let virtual = screens.virtualDesktop
+        switch config.edge {
+        case .right: return remoteCursor.x - Double(virtual.left)
+        case .left: return Double(virtual.right - 1) - remoteCursor.x
+        case .bottom: return remoteCursor.y - Double(virtual.top)
+        case .top: return Double(virtual.bottom - 1) - remoteCursor.y
         }
     }
 

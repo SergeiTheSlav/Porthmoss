@@ -15,6 +15,12 @@ final class EventTap {
     private var runLoopSource: CFRunLoopSource?
     private let handler: Handler
 
+    /// How often the system has disabled the tap for being slow. Every one of
+    /// these is a window in which input reached the Mac instead of the PC, so
+    /// it is worth surfacing rather than silently recovering.
+    private(set) var timeoutCount = 0
+    var onTimeout: (Int) -> Void = { _ in }
+
     static let mask: CGEventMask = {
         let types: [CGEventType] = [
             .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged,
@@ -84,6 +90,10 @@ final class EventTap {
         // the classic way an event tap "randomly stops working".
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             if let port = machPort { CGEvent.tapEnable(tap: port, enable: true) }
+            if type == .tapDisabledByTimeout {
+                timeoutCount += 1
+                onTimeout(timeoutCount)
+            }
             return nil
         }
         return handler(type, event) ? nil : Unmanaged.passUnretained(event)

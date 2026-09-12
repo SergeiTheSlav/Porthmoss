@@ -44,6 +44,12 @@ final class Session: @unchecked Sendable {
         let tap = EventTap { [weak self] type, event in
             self?.handle(type: type, event: event) ?? false
         }
+        tap.onTimeout = { [weak self] count in
+            // The tap only stalls if this callback is slow. If it ever shows up
+            // in the field, the input path needs to get off the callback thread.
+            self?.onStatus("warning: event tap stalled and was re-enabled (\(count)x) — "
+                + "some input may have reached the Mac instead of the PC")
+        }
         try tap.start()
         self.tap = tap
 
