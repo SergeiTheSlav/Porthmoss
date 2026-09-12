@@ -14,10 +14,12 @@ struct MainWindow: View {
         }
         .padding(Metrics.gap)
         .task {
-            // Look for PCs as soon as the window appears: the common case is
-            // one PC on the LAN, and making the user press a button first is
-            // a step that never had a reason to exist.
-            if model.discovered.isEmpty, model.settings.agentHost.isEmpty {
+            // A PC we already know: connect to it. This is a background utility
+            // — opening it and then having to press Connect every time is a
+            // step that never had a reason to exist.
+            if !model.settings.agentHost.isEmpty {
+                model.connect()
+            } else if model.discovered.isEmpty {
                 model.search()
             }
         }
@@ -70,11 +72,12 @@ private struct StatusPanel: View {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(headline)
                             .font(.system(size: 13, weight: .semibold))
-                        if !model.statusLine.isEmpty {
-                            Text(model.statusLine)
+                        if !detail.isEmpty {
+                            Text(detail)
                                 .font(.system(size: 11))
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
+                                .textSelection(.enabled)
                         }
                     }
                     Spacer(minLength: 0)
@@ -103,8 +106,16 @@ private struct StatusPanel: View {
         case let .pairing(host): return "Pairing with \(host)"
         case let .connected(host):
             return model.isControllingPC ? "Controlling \(host)" : "Connected to \(host)"
-        case .failed: return "Disconnected"
+        case .failed: return "Couldn’t connect"
         }
+    }
+
+    /// A failure carries its own explanation, and that explanation is the most
+    /// useful thing on screen — showing only `statusLine` here meant the reason
+    /// was computed and then silently dropped.
+    private var detail: String {
+        if case let .failed(reason) = model.state { return reason }
+        return model.statusLine
     }
 
     private var icon: String {

@@ -29,8 +29,13 @@ final class AgentConnection: @unchecked Sendable {
     var onStateChange: @Sendable (State) -> Void = { _ in }
     var onDisconnect: @Sendable (String) -> Void = { _ in }
 
+    private let host: String
+    private let port: UInt16
+
     init(host: String, port: UInt16, pinnedFingerprint: Data?) {
         self.pinnedFingerprint = pinnedFingerprint
+        self.host = host
+        self.port = port
 
         let tls = NWProtocolTLS.Options()
         sec_protocol_options_set_min_tls_protocol_version(tls.securityProtocolOptions, .TLSv13)
@@ -83,10 +88,27 @@ final class AgentConnection: @unchecked Sendable {
 
     private let fingerprintBox: FingerprintBox
 
-    /// Turns a TLS-layer failure into something a user can act on. A rejected
-    /// pin is the security-relevant case and must never read as a generic
-    /// network hiccup.
+    /// Turns a network failure into something a user can act on. "NWError
+    /// error 61" tells nobody anything; the interesting cases are a rejected
+    /// pin, and nothing listening at the other end.
     private func explain(_ error: NWError) -> Error {
+        if case let .posix(code) = error, !fingerprintBox.rejectedPin {
+            switch code {
+            case .ECONNREFUSED:
+                return WireError.rejected(
+                    "Nothing is listening at \(host):\(port). Is Porthmoss running on the PC?")
+            case .ETIMEDOUT, .EHOSTUNREACH, .EHOSTDOWN:
+                return WireError.rejected(
+                    "\(host) didn’t answer. Check the PC is awake, on the same network, "
+                        + "and allowed through its firewall.")
+            case .ENETUNREACH, .ENETDOWN:
+                return WireError.rejected("This Mac has no route to \(host).")
+            case .ECONNRESET:
+                return WireError.rejected("The PC closed the connection.")
+            default:
+                return error
+            }
+        }
         guard fingerprintBox.rejectedPin else { return error }
         let presented = fingerprintBox.value.map(hex) ?? "unknown"
         return WireError.rejected("""
@@ -179,8 +201,9 @@ final class AgentConnection: @unchecked Sendable {
                     } else {
                         guard let stored = storedSecret else {
                             return completion(.failure(WireError.rejected(
-                                "This Mac has no pairing for that PC. On the PC, choose "
-                                    + "\"Forget paired Mac\" from the Porthmoss tray icon, then connect again.")))
+                                "This Mac isn’t paired with that PC. On the PC, click "
+                                    + "“Forget paired Mac” in Porthmoss, then connect again "
+                                    + "to pair with a new code.")))
                         }
                         secret = stored
                     }
