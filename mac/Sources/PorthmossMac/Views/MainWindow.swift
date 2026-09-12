@@ -28,12 +28,14 @@ struct MainWindow: View {
     }
 }
 
-/// The wordmark: πορθμός, Greek for a strait — the narrow water between two
-/// shores, which is the whole idea of the app. Set quietly, in half-transparent
-/// grey, so it reads as a mark rather than as another piece of the interface.
+/// The wordmark. πορθμός is Greek for a strait — the narrow water between two
+/// shores. The doubled final sigma is deliberate: it mirrors the doubled s in
+/// Porthmoss, so the mark and the product name end the same way. Set quietly,
+/// in half-transparent grey, so it reads as a mark rather than as another
+/// piece of the interface.
 private struct Logotype: View {
     var body: some View {
-        Text("πορθμός")
+        Text("πορθμόςς")
             .font(.system(size: 17, weight: .light, design: .serif))
             .tracking(4)
             .foregroundStyle(Color.gray.opacity(0.5))

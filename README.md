@@ -218,4 +218,5 @@ win/
 ## Name
 
 **πορθμός** — a strait: the narrow water between two shores, and the crossing
-over it. That is the icon, and the wordmark inside the app.
+over it. The wordmark in the app is set **πορθμόςς**, doubling the final sigma
+so it ends the way Porthmoss does.
