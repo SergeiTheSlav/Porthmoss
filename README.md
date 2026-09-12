@@ -104,10 +104,17 @@ Both halves build from the Mac — the Windows agent is pure Go, so no Windows
 machine or toolchain is needed to produce the `.exe`.
 
 ```bash
-make            # Mac client + Windows agent
+make            # Porthmoss.app + the Windows agent, into dist/
+make install    # also copy the app to /Applications
 make dist       # agent for Windows x64 and ARM64
-make app        # wrap the Mac client in Porthmoss.app
 ```
+
+`make` produces `dist/Porthmoss.app`, which you can double-click straight from
+Finder. `make install` puts it in `/Applications` so Spotlight finds it too.
+
+The app icon is drawn from source by `mac/Scripts/make-icon.swift` and built
+into the bundle, so it is changed by editing the drawing rather than a
+binary asset.
 
 ## Running
 
@@ -119,9 +126,9 @@ The window is WebView2, which ships with Windows 11 and most Windows 10
 installs. Without it the agent still works — it just runs headless, and
 `--console` is the way to see what it is doing.
 
-On the **Mac**, `make run`, or open `mac/.build/Porthmoss.app`. It lives in the
-menu bar, finds the PC on the network, and asks once for the 6-digit code the
-agent is showing. After that it reconnects on its own.
+On the **Mac**, double-click `dist/Porthmoss.app` (or `make run`). It lives in
+the menu bar, finds the PC on the network, and asks once for the 6-digit code
+the agent is showing. After that it reconnects on its own.
 
 The menu bar glyph fills in while the PC is being driven, so it always answers
 "where is my keyboard going right now?"
@@ -135,9 +142,10 @@ The Mac app needs **both** Accessibility and Input Monitoring in
 System Settings → Privacy & Security. Accessibility to modify events, Input
 Monitoring to see keystrokes at all; with only one, the tap fails to install.
 
-Run `Porthmoss.app`, not the bare binary: macOS grants those permissions to a
-code identity rather than to a path, so the raw executable inherits whatever
-the terminal was granted. The ad-hoc signature changes on every rebuild, so
+Run `Porthmoss.app`, not the bare binary — which is why `make` builds the
+bundle rather than leaving you an executable. macOS grants those permissions to
+a code identity rather than to a path, so a raw binary inherits whatever the
+terminal was granted. The ad-hoc signature changes on every rebuild, so
 macOS re-asks until this is signed with a real Developer ID.
 
 ## Known limitations
@@ -207,4 +215,5 @@ win/
 
 ## Name
 
-A porthmeus (πορθμεύς) is a ferryman. This one carries your keyboard across.
+**πορθμός** — a strait: the narrow water between two shores, and the crossing
+over it. That is the icon, and the wordmark inside the app.

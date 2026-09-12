@@ -10,6 +10,7 @@ struct MainWindow: View {
             PCPanel()
             if model.isConnected { CrossingPanel() }
             SettingsPanel()
+            Logotype()
         }
         .padding(Metrics.gap)
         .task {
@@ -24,6 +25,21 @@ struct MainWindow: View {
             PairingSheet(request: request)
                 .environmentObject(model)
         }
+    }
+}
+
+/// The wordmark: πορθμός, Greek for a strait — the narrow water between two
+/// shores, which is the whole idea of the app. Set quietly, in half-transparent
+/// grey, so it reads as a mark rather than as another piece of the interface.
+private struct Logotype: View {
+    var body: some View {
+        Text("πορθμός")
+            .font(.system(size: 17, weight: .light, design: .serif))
+            .tracking(4)
+            .foregroundStyle(Color.gray.opacity(0.5))
+            .frame(maxWidth: .infinity)
+            .padding(.top, 2)
+            .accessibilityHidden(true)
     }
 }
 

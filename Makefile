@@ -1,23 +1,33 @@
 # Both halves build from the Mac: the Windows agent is pure Go and needs no
 # Windows toolchain, no cgo, and no Windows machine to compile on.
 
-MAC_BIN := mac/.build/debug/PorthmossMac
-DIST    := dist
+DIST := dist
+APP  := $(DIST)/Porthmoss.app
 
-.PHONY: all mac agent agent-arm64 test test-go test-mac app dist clean
+.PHONY: all mac app run install uninstall agent agent-arm64 test test-go test-mac test-cursor dist clean
 
-all: mac agent
+# The app is the deliverable on the Mac side, so a bare `make` produces
+# something double-clickable in Finder rather than a binary in .build.
+all: app agent
 
 mac:
 	cd mac && swift build
 
-# The GUI needs the bundle: macOS grants Accessibility and Input Monitoring to
-# a code identity, not a path, so run Porthmoss.app rather than the raw binary.
-run: app
-	open mac/.build/Porthmoss.app
+app:
+	cd mac && swift build -c release
+	cd mac && ./Scripts/make-app.sh release
 
-app: mac
-	cd mac && ./Scripts/make-app.sh debug
+run: app
+	open $(APP)
+
+# Put it where Finder and Spotlight expect to find it.
+install: app
+	rm -rf /Applications/Porthmoss.app
+	cp -R $(APP) /Applications/
+	@echo "Installed to /Applications/Porthmoss.app"
+
+uninstall:
+	rm -rf /Applications/Porthmoss.app
 
 # -H windowsgui drops the console window: this is a tray app. `--console`
 # reattaches to the launching terminal when output is actually wanted.
