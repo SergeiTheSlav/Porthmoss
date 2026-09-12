@@ -185,7 +185,16 @@ func (s *Server) handle(ctx context.Context, conn net.Conn) error {
 	var clip *clipboardBridge
 	if s.Clipboard != nil {
 		clip = newClipboardBridge(s.Clipboard, s.Log)
-		go clip.watch(sessionCtx, send)
+		sendFiles := func(paths []string) error {
+			s.Log.Info("sharing copied files with the Mac", "count", len(paths))
+			if err := transfer.Send(paths, proto.FileFlagClipboard, send); err != nil {
+				// A file we cannot read is the user's problem to see, not a
+				// reason to end a session they are still using.
+				s.Log.Warn("could not share copied files", "err", err)
+			}
+			return nil
+		}
+		go clip.watch(sessionCtx, send, sendFiles)
 	}
 
 	var incoming *transfer.Receiver
@@ -392,7 +401,7 @@ func (s *Server) dispatch(
 	case proto.TypeFileBegin, proto.TypeFileChunk, proto.TypeFileEnd, proto.TypeFileAbort:
 		// A rejected file is the sender's problem, not a reason to drop the
 		// session: the user is still holding a mouse that has to keep working.
-		if err := s.receiveFile(incoming, frame); err != nil {
+		if err := s.receiveFile(incoming, clip, frame); err != nil {
 			s.Log.Warn("file transfer failed", "err", err)
 			return send(proto.TypeFileAbort, []byte(err.Error()))
 		}
@@ -423,7 +432,7 @@ func writeFrame(conn net.Conn, typ byte, body []byte) error {
 }
 
 // receiveFile applies one step of a transfer from the Mac.
-func (s *Server) receiveFile(incoming *transfer.Receiver, frame proto.Frame) error {
+func (s *Server) receiveFile(incoming *transfer.Receiver, clip *clipboardBridge, frame proto.Frame) error {
 	if incoming == nil {
 		return errors.New("this PC is not accepting files")
 	}
@@ -447,6 +456,20 @@ func (s *Server) receiveFile(incoming *transfer.Receiver, frame proto.Frame) err
 		s.Log.Info("file received", "path", path)
 		if s.OnFileReceived != nil {
 			s.OnFileReceived(path, 0, 0)
+		}
+		// A copy becomes a paste: put the whole batch on the clipboard once
+		// the last file has landed.
+		if paths, done := incoming.Batch(); done {
+			if files, ok := s.Clipboard.(clipboard.Files); ok {
+				if err := files.SetPaths(paths); err != nil {
+					s.Log.Warn("could not put the files on the clipboard", "err", err)
+				} else {
+					s.Log.Info("files ready to paste", "count", len(paths))
+					if clip != nil {
+						clip.notePastedFiles(paths)
+					}
+				}
+			}
 		}
 		return nil
 

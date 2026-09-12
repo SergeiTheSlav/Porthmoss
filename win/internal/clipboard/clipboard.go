@@ -22,3 +22,21 @@ type Clipboard interface {
 // transfer, and a 10 MB paste has no business being mirrored across a link
 // that exists to carry keystrokes.
 const MaxText = 256 * 1024
+
+// Files is a clipboard that can also hold a list of file paths — CF_HDROP on
+// Windows, file URLs on macOS. Copying files in a file manager puts them here,
+// and that is the only way to get at a set of files the user has chosen
+// without watching a drag, which no application is allowed to do from outside
+// the one that started it.
+type Files interface {
+	Clipboard
+	// Paths returns the files currently on the clipboard, or nil.
+	Paths() ([]string, error)
+	// SetPaths puts files on the clipboard, so the next paste produces them.
+	SetPaths([]string) error
+}
+
+// MaxClipboardFiles bounds a single copy. Selecting a whole folder and
+// pressing Ctrl+C should fail immediately rather than quietly starting a
+// thousand transfers.
+const MaxClipboardFiles = 64

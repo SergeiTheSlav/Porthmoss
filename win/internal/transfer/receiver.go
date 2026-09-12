@@ -24,6 +24,13 @@ type Receiver struct {
 	file      *os.File
 	path      string
 	remaining uint64
+
+	// batch collects the files of one copy, so they can be put on the
+	// clipboard together once the last one has arrived. A paste that produced
+	// files one at a time as they landed would be worse than useless.
+	batch         []string
+	batchTotal    int
+	fromClipboard bool
 }
 
 // SafeName reduces a name chosen by the other machine to something that can
@@ -118,7 +125,21 @@ func (r *Receiver) Begin(begin proto.FileBegin) error {
 		return fmt.Errorf("creating %s: %w", path, err)
 	}
 	r.file, r.path, r.remaining = file, path, begin.Size
+	if begin.Index == 0 {
+		r.batch = r.batch[:0]
+	}
+	r.batchTotal = int(begin.Total)
+	r.fromClipboard = begin.FromClipboard()
 	return nil
+}
+
+// Batch returns the files of a completed clipboard copy, and whether the batch
+// is now finished. Empty for a drag, which does not touch the clipboard.
+func (r *Receiver) Batch() (paths []string, done bool) {
+	if !r.fromClipboard {
+		return nil, false
+	}
+	return r.batch, len(r.batch) > 0 && len(r.batch) >= r.batchTotal
 }
 
 // Chunk writes the next piece.
@@ -155,6 +176,7 @@ func (r *Receiver) End() (string, error) {
 	}
 	// Readable by the user now that it is complete.
 	os.Chmod(path, 0o644)
+	r.batch = append(r.batch, path)
 	return path, nil
 }
 

@@ -10,6 +10,7 @@ import "sync"
 type Memory struct {
 	mu       sync.Mutex
 	text     string
+	paths    []string
 	sequence uint32
 }
 
@@ -33,4 +34,20 @@ func (m *Memory) Sequence() uint32 {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.sequence
+}
+
+// Paths and SetPaths make the in-memory clipboard satisfy Files, so the
+// sharing logic can be tested from the Mac side of the repo.
+func (m *Memory) Paths() ([]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]string(nil), m.paths...), nil
+}
+
+func (m *Memory) SetPaths(paths []string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.paths = append([]string(nil), paths...)
+	m.sequence++
+	return nil
 }

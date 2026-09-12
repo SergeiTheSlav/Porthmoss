@@ -32,13 +32,37 @@ type clipboardBridge struct {
 	clip clipboard.Clipboard
 	log  *slog.Logger
 
-	mu       sync.Mutex
-	lastText string
-	lastSeq  uint32
+	mu        sync.Mutex
+	lastText  string
+	lastPaths []string
+	lastSeq   uint32
+}
+
+func samePaths(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func newClipboardBridge(clip clipboard.Clipboard, log *slog.Logger) *clipboardBridge {
 	return &clipboardBridge{clip: clip, log: log, lastSeq: clip.Sequence()}
+}
+
+// notePastedFiles records files this session just put on the clipboard, so the
+// watcher does not read them straight back and send them to the Mac again.
+func (b *clipboardBridge) notePastedFiles(paths []string) {
+	b.mu.Lock()
+	b.lastPaths = append([]string(nil), paths...)
+	b.mu.Unlock()
+	b.mu.Lock()
+	b.lastSeq = b.clip.Sequence()
+	b.mu.Unlock()
 }
 
 // applyRemote puts text from the Mac on this PC's clipboard.
@@ -59,7 +83,11 @@ func (b *clipboardBridge) applyRemote(text string) error {
 }
 
 // watch sends local clipboard changes to the Mac until ctx is done.
-func (b *clipboardBridge) watch(ctx context.Context, send func(byte, []byte) error) {
+func (b *clipboardBridge) watch(
+	ctx context.Context,
+	send func(byte, []byte) error,
+	sendFiles func([]string) error,
+) {
 	ticker := time.NewTicker(clipboardPollInterval)
 	defer ticker.Stop()
 
@@ -76,6 +104,30 @@ func (b *clipboardBridge) watch(ctx context.Context, send func(byte, []byte) err
 		b.mu.Unlock()
 		if unchanged {
 			continue
+		}
+
+		// Files first: copying files in Explorer also leaves a text form on
+		// the clipboard, and sending that instead would be the wrong thing.
+		if files, ok := b.clip.(clipboard.Files); ok {
+			paths, err := files.Paths()
+			if err != nil {
+				b.log.Debug("clipboard files unreadable", "err", err)
+			}
+			if len(paths) > 0 {
+				b.mu.Lock()
+				b.lastSeq = sequence
+				echo := samePaths(paths, b.lastPaths)
+				if !echo {
+					b.lastPaths = append([]string(nil), paths...)
+				}
+				b.mu.Unlock()
+				if !echo && sendFiles != nil {
+					if err := sendFiles(paths); err != nil {
+						return
+					}
+				}
+				continue
+			}
 		}
 
 		text, err := b.clip.Text()

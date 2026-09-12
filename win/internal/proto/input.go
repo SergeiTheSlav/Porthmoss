@@ -97,6 +97,12 @@ func DecodeU64(b []byte) (uint64, error) {
 	return binary.BigEndian.Uint64(b), nil
 }
 
+// FileFlagClipboard marks a batch that came from the sender's clipboard
+// rather than from a drag. The receiver still writes the files to disk — it
+// has to put them somewhere — but also puts them on its own clipboard, so the
+// user's next paste produces the files rather than nothing.
+const FileFlagClipboard = 1 << 0
+
 // FileBegin announces a file: its name, its size, and where it sits in the
 // batch so the receiver can report "2 of 5" rather than counting.
 type FileBegin struct {
@@ -104,16 +110,21 @@ type FileBegin struct {
 	Size  uint64
 	Index uint16
 	Total uint16
+	Flags byte
 }
+
+// FromClipboard reports whether this batch should land on the clipboard too.
+func (f FileBegin) FromClipboard() bool { return f.Flags&FileFlagClipboard != 0 }
 
 func (f FileBegin) Encode() []byte {
 	name := []byte(f.Name)
-	out := make([]byte, 0, 14+len(name))
+	out := make([]byte, 0, 15+len(name))
 	out = binary.BigEndian.AppendUint16(out, uint16(len(name)))
 	out = append(out, name...)
 	out = binary.BigEndian.AppendUint64(out, f.Size)
 	out = binary.BigEndian.AppendUint16(out, f.Index)
 	out = binary.BigEndian.AppendUint16(out, f.Total)
+	out = append(out, f.Flags)
 	return out
 }
 
@@ -126,10 +137,15 @@ func DecodeFileBegin(b []byte) (FileBegin, error) {
 		return FileBegin{}, io.ErrUnexpectedEOF
 	}
 	rest := b[2+n:]
-	return FileBegin{
+	begin := FileBegin{
 		Name:  string(b[2 : 2+n]),
 		Size:  binary.BigEndian.Uint64(rest),
 		Index: binary.BigEndian.Uint16(rest[8:]),
 		Total: binary.BigEndian.Uint16(rest[10:]),
-	}, nil
+	}
+	// The flag byte came after the first version of this message.
+	if len(rest) > 12 {
+		begin.Flags = rest[12]
+	}
+	return begin, nil
 }

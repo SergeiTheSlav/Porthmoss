@@ -160,7 +160,15 @@ public extension Wire {
 
     /// FILE_BEGIN: the name, the size, and where this file sits in the batch
     /// so the receiver can say "2 of 5" rather than counting.
-    static func fileBeginBody(name: String, size: UInt64, index: Int, total: Int) -> [UInt8] {
+    /// Set when the batch came from the sender's clipboard rather than a drag.
+    /// The receiver writes the files either way — they have to go somewhere —
+    /// but a clipboard batch also lands on its clipboard, so the next paste
+    /// produces the files rather than nothing.
+    static let fileFlagClipboard: UInt8 = 1 << 0
+
+    static func fileBeginBody(
+        name: String, size: UInt64, index: Int, total: Int, fromClipboard: Bool = false
+    ) -> [UInt8] {
         let nameBytes = Array(name.utf8.prefix(1024))
         var out: [UInt8] = []
         out.appendBigEndian(UInt16(nameBytes.count))
@@ -168,11 +176,14 @@ public extension Wire {
         out.appendBigEndian(size)
         out.appendBigEndian(UInt16(clamping: index))
         out.appendBigEndian(UInt16(clamping: total))
+        out.append(fromClipboard ? fileFlagClipboard : 0)
         return out
     }
 
     /// Decodes a FILE_BEGIN sent by the PC.
-    static func decodeFileBegin(_ body: [UInt8]) throws -> (name: String, size: UInt64, index: Int, total: Int) {
+    static func decodeFileBegin(
+        _ body: [UInt8]
+    ) throws -> (name: String, size: UInt64, index: Int, total: Int, fromClipboard: Bool) {
         guard body.count >= 2 else { throw WireError.truncated }
         let nameLength = Int(body[0]) << 8 | Int(body[1])
         guard body.count >= 2 + nameLength + 12 else { throw WireError.truncated }
@@ -181,7 +192,9 @@ public extension Wire {
         let size = rest.prefix(8).reduce(UInt64(0)) { $0 << 8 | UInt64($1) }
         let index = Int(rest[8]) << 8 | Int(rest[9])
         let total = Int(rest[10]) << 8 | Int(rest[11])
-        return (name, size, index, total)
+        // The flag byte came after the first version of this message.
+        let fromClipboard = rest.count > 12 && rest[12] & fileFlagClipboard != 0
+        return (name, size, index, total, fromClipboard)
     }
 
     static func pingBody(_ id: UInt64) -> [UInt8] {

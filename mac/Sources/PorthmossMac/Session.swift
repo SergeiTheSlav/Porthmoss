@@ -62,9 +62,16 @@ final class Session: @unchecked Sendable {
         connection.onDisconnect = { [weak self] reason in
             DispatchQueue.main.async { self?.panic("connection lost: \(reason)") }
         }
-        let clipboard = ClipboardBridge { [weak self] text in
-            self?.connection.post(.clipboardText, Array(text.utf8))
-        }
+        let clipboard = ClipboardBridge(
+            send: { [weak self] text in
+                self?.connection.post(.clipboardText, Array(text.utf8))
+            },
+            sendFiles: { [weak self] urls in
+                // Copying files in Finder sends them to the PC, where they
+                // land in a folder and go on its clipboard ready to paste.
+                self?.sendFiles(urls, fromClipboard: true)
+            }
+        )
         connection.onClipboardText = { [weak self] text in
             DispatchQueue.main.async { self?.clipboard?.applyRemote(text) }
         }
@@ -234,7 +241,7 @@ final class Session: @unchecked Sendable {
 
     /// Streams files to the PC off the main thread. Reading a large file in
     /// the event tap callback would stall every input event behind it.
-    private func sendFiles(_ urls: [URL]) {
+    private func sendFiles(_ urls: [URL], fromClipboard: Bool = false) {
         onStatus(urls.count == 1
                  ? "Sending \(urls[0].lastPathComponent)…"
                  : "Sending \(urls.count) files…")
@@ -242,7 +249,9 @@ final class Session: @unchecked Sendable {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             for (index, url) in urls.enumerated() {
                 do {
-                    try FileTransfer.send(url, index: index, total: urls.count) { type, body in
+                    try FileTransfer.send(
+                        url, index: index, total: urls.count, fromClipboard: fromClipboard
+                    ) { type, body in
                         connection.post(type, body)
                     }
                 } catch {
@@ -267,12 +276,25 @@ final class Session: @unchecked Sendable {
             switch type {
             case Wire.MessageType.fileBegin.rawValue:
                 let begin = try Wire.decodeFileBegin(body)
-                try incoming.begin(name: begin.name, size: begin.size)
+                try incoming.begin(
+                    name: begin.name, size: begin.size,
+                    index: begin.index, total: begin.total,
+                    fromClipboard: begin.fromClipboard
+                )
             case Wire.MessageType.fileChunk.rawValue:
                 try incoming.chunk(body)
             case Wire.MessageType.fileEnd.rawValue:
                 let url = try incoming.end()
-                onStatus("Received \(url.lastPathComponent) from the PC.")
+                // A copy becomes a paste: the whole batch goes on the
+                // pasteboard once the last file has landed.
+                if let batch = incoming.completedClipboardBatch {
+                    clipboard?.applyRemoteFiles(batch)
+                    onStatus(batch.count == 1
+                             ? "\(url.lastPathComponent) is ready to paste."
+                             : "\(batch.count) files are ready to paste.")
+                } else {
+                    onStatus("Received \(url.lastPathComponent) from the PC.")
+                }
             default:
                 incoming.discard()
             }

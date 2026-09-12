@@ -12,8 +12,9 @@ import (
 )
 
 type sentFrames struct {
-	mu   sync.Mutex
-	text []string
+	mu    sync.Mutex
+	text  []string
+	files [][]string
 }
 
 func (s *sentFrames) send(typ byte, body []byte) error {
@@ -23,6 +24,19 @@ func (s *sentFrames) send(typ byte, body []byte) error {
 		s.mu.Unlock()
 	}
 	return nil
+}
+
+func (s *sentFrames) sendFiles(paths []string) error {
+	s.mu.Lock()
+	s.files = append(s.files, paths)
+	s.mu.Unlock()
+	return nil
+}
+
+func (s *sentFrames) allFiles() [][]string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([][]string(nil), s.files...)
 }
 
 func (s *sentFrames) all() []string {
@@ -51,7 +65,7 @@ func TestClipboardSharesLocalChanges(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go bridge.watch(ctx, sent.send)
+	go bridge.watch(ctx, sent.send, sent.sendFiles)
 
 	if err := clip.SetText("copied on the PC"); err != nil {
 		t.Fatalf("SetText: %v", err)
@@ -73,7 +87,7 @@ func TestClipboardDoesNotEchoRemoteText(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go bridge.watch(ctx, sent.send)
+	go bridge.watch(ctx, sent.send, sent.sendFiles)
 
 	if err := bridge.applyRemote("copied on the Mac"); err != nil {
 		t.Fatalf("applyRemote: %v", err)
@@ -105,7 +119,7 @@ func TestClipboardIgnoresNonText(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go bridge.watch(ctx, sent.send)
+	go bridge.watch(ctx, sent.send, sent.sendFiles)
 
 	// An empty read is how "the clipboard holds an image" arrives, and it must
 	// not wipe the other machine's clipboard.
@@ -115,5 +129,58 @@ func TestClipboardIgnoresNonText(t *testing.T) {
 	time.Sleep(clipboardPollInterval * 3)
 	if got := sent.all(); len(got) != 0 {
 		t.Errorf("sent %q for a non-text clipboard", got)
+	}
+}
+
+// TestClipboardSharesCopiedFiles covers copying files on the PC: the paths go
+// to the Mac, which fetches them. Copying files in Explorer also leaves a text
+// form on the clipboard, and sending that instead would be the wrong thing.
+func TestClipboardSharesCopiedFiles(t *testing.T) {
+	clip := clipboard.New()
+	bridge := newClipboardBridge(clip, slog.New(slog.DiscardHandler))
+	sent := &sentFrames{}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go bridge.watch(ctx, sent.send, sent.sendFiles)
+
+	if err := clip.SetPaths([]string{`C:\Users\jan\report.pdf`, `C:\Users\jan\notes.txt`}); err != nil {
+		t.Fatalf("SetPaths: %v", err)
+	}
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) && len(sent.allFiles()) == 0 {
+		time.Sleep(20 * time.Millisecond)
+	}
+	got := sent.allFiles()
+	if len(got) != 1 || len(got[0]) != 2 {
+		t.Fatalf("shared %v, want one batch of two files", got)
+	}
+	if text := sent.all(); len(text) != 0 {
+		t.Errorf("also sent text %q for a file copy", text)
+	}
+}
+
+// TestClipboardDoesNotEchoPastedFiles is the file-shaped version of the echo
+// problem: files arriving from the Mac are put on the clipboard, the watcher
+// sees the change, and without care sends them straight back.
+func TestClipboardDoesNotEchoPastedFiles(t *testing.T) {
+	clip := clipboard.New()
+	bridge := newClipboardBridge(clip, slog.New(slog.DiscardHandler))
+	sent := &sentFrames{}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go bridge.watch(ctx, sent.send, sent.sendFiles)
+
+	paths := []string{`C:\Users\jan\Downloads\Porthmoss\from-mac.txt`}
+	if err := clip.SetPaths(paths); err != nil {
+		t.Fatalf("SetPaths: %v", err)
+	}
+	bridge.notePastedFiles(paths)
+
+	time.Sleep(clipboardPollInterval * 3)
+	if got := sent.allFiles(); len(got) != 0 {
+		t.Errorf("echoed the Mac's own files back to it: %v", got)
 	}
 }

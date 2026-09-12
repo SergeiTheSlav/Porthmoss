@@ -172,7 +172,11 @@ To remove it: `security delete-keychain ~/Library/Keychains/porthmoss-signing.ke
   fixes this without a driver.
 - **Anti-cheat-protected games reject injected input**, which is flagged
   `LLMHF_INJECTED`.
-- No clipboard sync and no file drag yet.
+- Input only flows Mac to PC. The PC's own mouse and keyboard cannot drive
+  the Mac; that needs low-level hooks on Windows and an injector on the Mac.
+- Dragging files works from the Mac to the PC only. Windows gives no way to
+  observe a drag starting in another application — the payload belongs to the
+  source app — so the other direction goes through copy and paste instead.
 - The Windows window needs the WebView2 runtime. Present on Windows 11 and
   most Windows 10 machines; without it the agent runs headless.
 

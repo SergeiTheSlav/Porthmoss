@@ -82,10 +82,15 @@ wrote.
 One file at a time, in order. Deliberately not interleaved: two at once would
 need stream ids and a scheduler, to save a user dragging a folder half a second.
 
-    0x60 FILE_BEGIN  u16 name_len, name, u64 size, u16 index, u16 total
+    0x60 FILE_BEGIN  u16 name_len, name, u64 size, u16 index, u16 total, u8 flags
     0x61 FILE_CHUNK  bytes, at most 256 KiB
     0x62 FILE_END    -
     0x63 FILE_ABORT  str reason
+
+`flags` bit 0 marks a batch that came from the sender's clipboard rather than a
+drag. The receiver writes those files to disk either way — they have to go
+somewhere — but also puts them on its own clipboard once the last one arrives,
+so the user's next paste produces the files rather than nothing.
 
 `name` is chosen by the sender and so is attacker-controlled. The receiver must
 reduce it to a single path component — no separators, no `..`, no reserved DOS

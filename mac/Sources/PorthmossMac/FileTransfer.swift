@@ -43,7 +43,7 @@ extension FileTransfer {
     /// to send it is a needless spike on a machine that is also running the
     /// user's actual work.
     static func send(
-        _ url: URL, index: Int, total: Int,
+        _ url: URL, index: Int, total: Int, fromClipboard: Bool = false,
         post: (Wire.MessageType, [UInt8]) -> Void
     ) throws {
         let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
@@ -56,7 +56,9 @@ extension FileTransfer {
         }
         defer { try? handle.close() }
 
-        post(.fileBegin, Wire.fileBeginBody(name: name, size: size, index: index, total: total))
+        post(.fileBegin, Wire.fileBeginBody(
+            name: name, size: size, index: index, total: total, fromClipboard: fromClipboard
+        ))
         var sent: UInt64 = 0
         while sent < size {
             guard let data = try handle.read(upToCount: chunkSize), !data.isEmpty else { break }
@@ -82,6 +84,20 @@ extension FileTransfer {
         private var url: URL?
         private var remaining: UInt64 = 0
 
+        /// Collects the files of one copy, so they reach the pasteboard
+        /// together once the last has arrived. A paste that produced files one
+        /// at a time as they landed would be worse than useless.
+        private(set) var batch: [URL] = []
+        private var batchTotal = 0
+        private var fromClipboard = false
+
+        /// The files of a finished clipboard copy, or nil while one is still
+        /// arriving or when the batch came from a drag.
+        var completedClipboardBatch: [URL]? {
+            guard fromClipboard, !batch.isEmpty, batch.count >= batchTotal else { return nil }
+            return batch
+        }
+
         /// Reduces a name from the other machine to a safe single component.
         static func safeName(_ raw: String) -> String? {
             var name = raw.replacingOccurrences(of: "\\", with: "/")
@@ -98,8 +114,12 @@ extension FileTransfer {
             return name
         }
 
-        func begin(name: String, size: UInt64) throws {
+        func begin(name: String, size: UInt64, index: Int = 0, total: Int = 1,
+                   fromClipboard: Bool = false) throws {
             discard()
+            if index == 0 { batch.removeAll() }
+            batchTotal = total
+            self.fromClipboard = fromClipboard
             guard size <= FileTransfer.maxFileSize else {
                 throw SendError.tooLarge(name: name, bytes: size)
             }
@@ -140,6 +160,7 @@ extension FileTransfer {
             try handle.close()
             self.handle = nil
             self.url = nil
+            batch.append(url)
             return url
         }
 
