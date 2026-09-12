@@ -113,8 +113,10 @@ make dist       # agent for Windows x64 and ARM64
 Finder. `make install` puts it in `/Applications` so Spotlight finds it too.
 
 The app icon is drawn from source by `mac/Scripts/make-icon.swift` and built
-into the bundle, so it is changed by editing the drawing rather than a
-binary asset.
+into the bundle, so it is changed by editing the drawing rather than a binary
+asset. It borrows Termoss's background — the same slate squircle, gradient and
+lit top edge, sampled from its icon rather than eyeballed — so the two read as
+a pair on the Dock.
 
 ## Running
 

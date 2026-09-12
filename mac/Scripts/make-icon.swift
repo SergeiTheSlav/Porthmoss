@@ -3,12 +3,15 @@ import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 
-// Draws the app icon: πορθμός, a strait — the narrow channel between two
-// shores, and the crossing over it. Two headlands almost touch; a bright wake
-// runs between them, left to right, the way the cursor does.
+// The app icon: a river.
 //
-// Everything is proportional to `size` so the same drawing works at 16pt and
-// 1024pt. Detail that would turn to mud at 16pt is deliberately absent.
+// The background is Termoss's — the same dark slate squircle, the same
+// gradient, the same lit top edge — so the two apps read as a pair on the
+// Dock. The artwork follows Termoss's rule too: flat, saturated shapes, no
+// gradients inside the glyph.
+//
+// Everything is proportional to `size`, so one drawing serves 16pt and 1024pt.
+// Detail that would turn to mud at 16pt is deliberately absent.
 
 let outputDirectory = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "."
 
@@ -16,10 +19,76 @@ func colour(_ r: Double, _ g: Double, _ b: Double, _ a: Double = 1) -> CGColor {
     CGColor(srgbRed: r / 255, green: g / 255, blue: b / 255, alpha: a)
 }
 
-/// macOS icons sit inside the canvas with a margin and a squircle-ish corner.
+/// Sampled from Termoss's own icon so the family resemblance is exact.
+enum Palette {
+    static let backgroundTop = colour(0x3D, 0x41, 0x51)
+    static let backgroundBottom = colour(0x24, 0x27, 0x32)
+    static let rim = colour(0x79, 0x7C, 0x88)
+    static let river = colour(0x80, 0x98, 0xE0)
+}
+
 func iconPath(in rect: CGRect) -> CGPath {
     CGPath(roundedRect: rect, cornerWidth: rect.width * 0.2237,
            cornerHeight: rect.height * 0.2237, transform: nil)
+}
+
+/// A point on a centreline, with the unit tangent there.
+typealias Course = (point: CGPoint, tangent: CGPoint)
+
+/// Builds a ribbon by walking a centreline and offsetting perpendicular to it,
+/// down one bank and back up the other.
+func ribbon(steps: Int = 240,
+            course: (Double) -> Course,
+            halfWidth: (Double) -> Double) -> CGPath {
+    var leftBank: [CGPoint] = []
+    var rightBank: [CGPoint] = []
+    leftBank.reserveCapacity(steps + 1)
+    rightBank.reserveCapacity(steps + 1)
+
+    for step in 0 ... steps {
+        let t = Double(step) / Double(steps)
+        let (point, tangent) = course(t)
+        let normal = CGPoint(x: -tangent.y, y: tangent.x)
+        let half = halfWidth(t)
+        leftBank.append(CGPoint(x: point.x + normal.x * half, y: point.y + normal.y * half))
+        rightBank.append(CGPoint(x: point.x - normal.x * half, y: point.y - normal.y * half))
+    }
+
+    // One continuous contour. addLines(between:) would start a fresh subpath
+    // per call and leave two disconnected threads rather than a filled band.
+    let path = CGMutablePath()
+    path.move(to: leftBank[0])
+    for point in leftBank.dropFirst() { path.addLine(to: point) }
+    for point in rightBank.reversed() { path.addLine(to: point) }
+    path.closeSubpath()
+    return path
+}
+
+/// The main channel: a gentle meander running off the top and bottom edges, so
+/// the squircle crops it and the river reads as flowing through rather than
+/// beginning and ending inside the icon.
+func mainChannel(_ t: Double, in body: CGRect) -> Course {
+    let turns = 0.82
+    let amplitude = body.width * 0.155
+    let phase = -0.5 * Double.pi
+
+    let top = body.maxY + body.height * 0.08
+    let drop = body.height * 1.16
+
+    let angle = 2 * Double.pi * turns * t + phase
+    let x = body.midX + amplitude * sin(angle)
+    let y = top - drop * t
+
+    let dx = amplitude * 2 * Double.pi * turns * cos(angle)
+    let dy = -drop
+    let length = (dx * dx + dy * dy).squareRoot()
+    return (CGPoint(x: x, y: y), CGPoint(x: dx / length, y: dy / length))
+}
+
+/// Rivers widen downstream, and that taper is most of what separates a river
+/// from a road.
+func mainWidth(_ t: Double, in body: CGRect) -> Double {
+    body.width * (0.026 + 0.105 * t)
 }
 
 func drawIcon(size: Double) -> CGImage? {
@@ -36,100 +105,32 @@ func drawIcon(size: Double) -> CGImage? {
     let margin = size * 0.094
     let body = CGRect(x: margin, y: margin, width: size - margin * 2, height: size - margin * 2)
 
-    // Water: a deep sea gradient, lighter towards the top.
     ctx.saveGState()
     ctx.addPath(iconPath(in: body))
     ctx.clip()
-    let sea = CGGradient(colorsSpace: space, colors: [
-        colour(46, 150, 205), colour(20, 96, 150), colour(10, 56, 96),
-    ] as CFArray, locations: [0, 0.55, 1])!
-    ctx.drawLinearGradient(sea, start: CGPoint(x: 0, y: body.maxY),
+
+    let slate = CGGradient(colorsSpace: space,
+                           colors: [Palette.backgroundTop, Palette.backgroundBottom] as CFArray,
+                           locations: [0, 1])!
+    ctx.drawLinearGradient(slate, start: CGPoint(x: 0, y: body.maxY),
                            end: CGPoint(x: 0, y: body.minY), options: [])
 
-    let w = body.width, h = body.height
-    let x0 = body.minX, y0 = body.minY
-
-    // Two pale headlands reach in from either side and very nearly touch. The
-    // land is the light mass and the water the dark one, because at 16pt the
-    // eye reads the bright shape first and that shape should be the strait.
-    let land = CGGradient(colorsSpace: space, colors: [
-        colour(238, 234, 223), colour(206, 199, 184),
-    ] as CFArray, locations: [0, 1])!
-
-    func headland(onLeft: Bool) {
-        // The inner coast runs from `shore` at top and bottom out towards the
-        // middle, narrowest at mid-height. `pinch` is a control point, not the
-        // coast itself: a cubic reaches only three quarters of the way to it,
-        // so 0.487 puts the actual shoreline at 0.44 and leaves a channel
-        // 12% of the icon wide.
-        let shore = onLeft ? 0.30 : 0.70
-        let pinch = onLeft ? 0.487 : 0.513
-        let outer = onLeft ? -0.06 : 1.06
-
-        let path = CGMutablePath()
-        path.move(to: CGPoint(x: x0 + w * outer, y: y0 - h * 0.06))
-        path.addLine(to: CGPoint(x: x0 + w * outer, y: y0 + h * 1.06))
-        path.addLine(to: CGPoint(x: x0 + w * shore, y: y0 + h * 1.06))
-        path.addCurve(
-            to: CGPoint(x: x0 + w * shore, y: y0 - h * 0.06),
-            control1: CGPoint(x: x0 + w * pinch, y: y0 + h * 0.78),
-            control2: CGPoint(x: x0 + w * pinch, y: y0 + h * 0.22)
-        )
-        path.closeSubpath()
-
-        ctx.saveGState()
-        ctx.addPath(path)
-        ctx.clip()
-        ctx.drawLinearGradient(land, start: CGPoint(x: 0, y: body.maxY),
-                               end: CGPoint(x: 0, y: body.minY), options: [])
-        ctx.restoreGState()
-
-        // A darker waterline where the land meets the sea.
-        ctx.addPath(path)
-        ctx.setStrokeColor(colour(120, 140, 150, 0.55))
-        ctx.setLineWidth(size * 0.008)
-        ctx.strokePath()
-    }
-    headland(onLeft: true)
-    headland(onLeft: false)
-
-    // The crossing: a route drawn over land and water alike, running through
-    // the narrows and out the far side.
-    let midY = y0 + h * 0.5
-    let track = size * 0.05
-    ctx.saveGState()
-    ctx.addPath(CGPath(roundedRect:
-        CGRect(x: x0 + w * 0.13, y: midY - track / 2, width: w * 0.60, height: track),
-        cornerWidth: track / 2, cornerHeight: track / 2, transform: nil))
-    ctx.setShadow(offset: .zero, blur: size * 0.05, color: colour(10, 30, 50, 0.45))
-    ctx.setFillColor(colour(255, 255, 255))
+    ctx.setFillColor(Palette.river)
+    ctx.addPath(ribbon(
+        course: { mainChannel($0, in: body) },
+        halfWidth: { mainWidth($0, in: body) }
+    ))
     ctx.fillPath()
-    ctx.restoreGState()
-
-    // Arrowhead: which way the crossing goes.
-    let tip = CGPoint(x: x0 + w * 0.88, y: midY)
-    let back = size * 0.115
-    let spread = size * 0.095
-    let head = CGMutablePath()
-    head.move(to: tip)
-    head.addLine(to: CGPoint(x: tip.x - back, y: midY + spread))
-    head.addLine(to: CGPoint(x: tip.x - back * 0.66, y: midY))
-    head.addLine(to: CGPoint(x: tip.x - back, y: midY - spread))
-    head.closeSubpath()
-    ctx.saveGState()
-    ctx.setShadow(offset: .zero, blur: size * 0.05, color: colour(10, 30, 50, 0.45))
-    ctx.addPath(head)
-    ctx.setFillColor(colour(255, 255, 255))
-    ctx.fillPath()
-    ctx.restoreGState()
 
     ctx.restoreGState()
 
-    // A soft top edge highlight, the way Apple's own icons catch the light.
+    // Termoss's lit top edge.
     ctx.saveGState()
     ctx.addPath(iconPath(in: body))
-    ctx.setStrokeColor(colour(255, 255, 255, 0.18))
-    ctx.setLineWidth(size * 0.006)
+    ctx.clip()
+    ctx.addPath(iconPath(in: body.insetBy(dx: size * 0.004, dy: size * 0.004)))
+    ctx.setStrokeColor(Palette.rim)
+    ctx.setLineWidth(size * 0.009)
     ctx.strokePath()
     ctx.restoreGState()
 
@@ -137,15 +138,13 @@ func drawIcon(size: Double) -> CGImage? {
 }
 
 func write(_ image: CGImage, to path: String) {
-    let url = URL(fileURLWithPath: path)
     guard let dest = CGImageDestinationCreateWithURL(
-        url as CFURL, UTType.png.identifier as CFString, 1, nil
+        URL(fileURLWithPath: path) as CFURL, UTType.png.identifier as CFString, 1, nil
     ) else { return }
     CGImageDestinationAddImage(dest, image, nil)
     CGImageDestinationFinalize(dest)
 }
 
-// The set macOS expects inside an .iconset.
 let variants: [(name: String, pixels: Double)] = [
     ("icon_16x16", 16), ("icon_16x16@2x", 32),
     ("icon_32x32", 32), ("icon_32x32@2x", 64),
