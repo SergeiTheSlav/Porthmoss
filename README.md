@@ -10,32 +10,41 @@ few bytes per mouse movement.
 
 ## Status
 
-Mac → PC works end to end and is what has actually been used: pairing, edge
-crossing, mouse, keyboard, scroll, and the safety releases. Both ends have a
-UI — a menu bar app on the Mac, a notification-area icon and window on the PC.
+The control path works end to end: pairing, edge crossing, mouse, keyboard,
+scroll, and the safety releases. Both ends have a UI — a menu bar app on the
+Mac, a notification-area icon and window on the PC.
 
 Clipboard text and files are shared both ways, and files dragged from the Mac
 land on the PC. Dragging *off* Windows is not possible from outside the
-application that starts the drag, so that direction goes through copy and paste.
+application that starts the drag, so that direction goes through copy and
+paste instead.
 
-PC → Mac input exists on both ends but **has never been run against a real
-pair of machines**: the Mac's injector is tested (`make test-injector`), the
-Windows capture path is tested on Windows, and the two have not met. See
-`docs/reverse-control-windows.md`.
+Control runs **both ways**. Mac to PC is the proven direction. PC to Mac —
+pushing the PC's cursor past the edge of its own desktop to take over the Mac —
+is built, its rules are unit-tested, and it builds and passes its tests on
+Windows 11 with the hooks installing cleanly; what has not happened yet is
+anyone driving a real Mac with it. See "Known limitations".
 
 ## How it works
 
 ```
-MacBook (source)                          Windows PC (target)
+MacBook                                   Windows PC
 ┌──────────────────────────┐              ┌──────────────────────────┐
 │ CGEventTap @ HID level   │              │ porthmoss-agent.exe      │
 │  ├ detects edge crossing │   TLS 1.3    │  ├ SendInput, absolute   │
 │  ├ swallows events while │◄────────────►│  ├ SendInput, scancodes  │
 │  │   driving the PC      │  TCP_NODELAY │  ├ reports monitor rects │
 │  ├ owns the PC's cursor  │              │  └ releases all on drop  │
-│  └ maps Cmd → Ctrl       │              └──────────────────────────┘
-└──────────────────────────┘
+│  ├ maps Cmd → Ctrl       │              │                          │
+│  └ MacInjector applies   │              │  ├ WH_MOUSE_LL           │
+│      input from the PC   │              │  ├ WH_KEYBOARD_LL        │
+└──────────────────────────┘              │  ├ detects edge crossing │
+                                          │  └ parks its own pointer │
+                                          └──────────────────────────┘
 ```
+
+Each machine is both a source and a target. The same seven messages travel in
+whichever direction control is going, over the one connection the Mac opened.
 
 **The Mac** runs a `CGEventTap` at `kCGHIDEventTap`. It is the only macOS API
 that can both observe *and consume* input — `NSEvent` global monitors can watch
@@ -83,6 +92,11 @@ is the worst thing this app could do to you:
 3. Automatically, if the agent stops answering for 2 seconds. The agent
    independently releases every held key and button after 2 seconds of silence,
    so a dropped Wi-Fi link cannot leave a modifier stuck down on the PC.
+
+The same three exist on the PC while it is driving the Mac: push back against
+the far edge of the Mac's desktop, **Ctrl+Alt+Win+P**, or losing the link. The
+PC's hotkey is only swallowed while it is actually driving the Mac — an agent
+that is not capturing has no business eating your shortcuts.
 
 ## Security
 
@@ -180,10 +194,25 @@ To remove it: `security delete-keychain ~/Library/Keychains/porthmoss-signing.ke
   fixes this without a driver.
 - **Anti-cheat-protected games reject injected input**, which is flagged
   `LLMHF_INJECTED`.
-- Input only flows Mac to PC in practice. The Mac can already *receive* and
-  apply input — see `MacInjector` and `make test-injector` — but nothing on
-  Windows captures it yet. `docs/reverse-control-windows.md` is the brief for
-  building that half.
+- **PC-to-Mac control has never been driven end to end with a Mac attached.**
+  The agent builds and its tests pass on Windows 11, and the two low-level
+  hooks demonstrably install and come back down there
+  (`TestHookInstallsAndComesBackDown`) — but nobody has yet pushed a real
+  cursor across and watched a real Mac respond. The crossing itself, the
+  swallowing, and the pointer parking are all still unwitnessed. In particular,
+  whether Windows keeps delivering mouse events once the pointer is pinned
+  against the edge of the desktop decides which of two paths a crossing takes.
+  See `docs/reverse-control-windows.md`.
+- **The PC's pointer is parked, not hidden,** while it drives the Mac: it sits
+  in the middle of the display it crossed from. Hiding it system-wide means
+  `SetSystemCursor`, which has to be restored afterwards and leaves the user
+  with no cursor at all if the agent dies first — the exact failure everything
+  else here is built to avoid.
+- The agent does not know how big the Mac's desktop is. `READY` carries
+  `ScreenInfo` from the PC to the Mac and the Mac sends none of its own, so the
+  PC assumes the Mac's desktop matches its own and `--sensitivity` makes up the
+  difference. It affects feel, not correctness: positions travel normalised and
+  the Mac maps them onto whatever it really has.
 - Dragging files works from the Mac to the PC only. Windows gives no way to
   observe a drag starting in another application — the payload belongs to the
   source app — so the other direction goes through copy and paste instead.
@@ -193,10 +222,23 @@ To remove it: `security delete-keychain ~/Library/Keychains/porthmoss-signing.ke
 ## Running the tests
 
 ```bash
-make test-go      # agent: protocol, pairing, dead-man switch, single controller
+make test-go      # agent: protocol, pairing, dead-man switch, single controller,
+                  #        and the PC's own edge crossing and capture path
 make test-mac     # Mac: wire codec, key mapping, edge crossing
 make test-cursor  # end-to-end: does the Mac cursor stay put while driving the PC?
 ```
+
+`internal/capture` is deliberately split so that `make test-go` covers as much
+of it as can be covered from a Mac: the crossing rules in `model.go` are the
+port of `CaptureModel.swift` and are tested against the same cases, and the
+controller that turns them into messages is tested against a fake pointer and a
+recording sender. Only the hooks themselves need Windows.
+
+To test the link before trusting the hooks, run the agent with
+`--probe-mac`. It installs nothing and instead sweeps the Mac's cursor across
+its screen as soon as a Mac connects, which separates "can this PC send?" from
+"can this PC capture?" — and the receiving half is already known-good, so a
+sweep that works means any remaining fault is in the hooks.
 
 `make test-cursor` pairs a real agent and a real client over loopback, crosses
 over, and checks the Mac cursor does not follow the mouse. It needs a window
@@ -234,6 +276,9 @@ win/
   cmd/porthmoss-agent entrypoint and the state-to-UI presenter
   internal/proto      wire protocol, mirrors PorthmossCore
   internal/inject     SendInput, plus a recording fake for tests on any OS
+  internal/capture    the other direction: edge-crossing model (portable, and
+                      the port of PorthmossCore's), low-level hooks, pointer
+                      parking
   internal/server     TLS server, handshake, dispatch, dead-man switch
   internal/pairing    certificate identity, HKDF pairing, HMAC auth
   internal/discovery  mDNS advertisement

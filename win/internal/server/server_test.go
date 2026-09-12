@@ -258,6 +258,115 @@ func TestRejectsSecondController(t *testing.T) {
 	}
 }
 
+// TestTheAgentCanDriveTheMac covers the seam the capture path hangs off: a
+// session hands out a Sender, and whatever is written to it reaches the Mac as
+// a real frame on the connection the Mac itself opened. Everything above this
+// — the low-level hooks — needs a Windows desktop, so this is as far as the
+// reverse direction can be proved from either machine.
+func TestTheAgentCanDriveTheMac(t *testing.T) {
+	rig := newRig(t)
+	senders := make(chan Sender, 4)
+	rig.srv.OnController = func(send Sender) { senders <- send }
+
+	if _, err := dial(t, rig, "000000"); err == nil {
+		t.Fatal("expected failure before pairing")
+	}
+	c, err := dial(t, rig, <-rig.codes)
+	if err != nil {
+		t.Fatalf("pair: %v", err)
+	}
+
+	send := waitForSender(t, senders)
+	if send == nil {
+		t.Fatal("the session offered a nil sender while a Mac was connected")
+	}
+
+	// The PC crosses onto the Mac, moves, types, and hands control back.
+	messages := []struct {
+		typ  byte
+		body []byte
+	}{
+		{proto.TypeEnter, proto.MouseMove{X: 65535, Y: 32768}.Encode()},
+		{proto.TypeMouseMove, proto.MouseMove{X: 40000, Y: 32768}.Encode()},
+		{proto.TypeKey, proto.Key{Scancode: 0x2E, Down: true}.Encode()},
+		{proto.TypeLeave, nil},
+	}
+	for _, message := range messages {
+		if err := send(message.typ, message.body); err != nil {
+			t.Fatalf("sending %s to the Mac: %v", hex(message.typ), err)
+		}
+	}
+
+	for i, message := range messages {
+		c.conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+		frame, err := proto.ReadFrame(c.conn, c.buf)
+		if err != nil {
+			t.Fatalf("reading message %d: %v", i, err)
+		}
+		if frame.Type != message.typ {
+			t.Fatalf("message %d arrived as %s, want %s", i, hex(frame.Type), hex(message.typ))
+		}
+		if !bytes.Equal(frame.Body, message.body) {
+			t.Errorf("message %d body = %x, want %x", i, frame.Body, message.body)
+		}
+	}
+
+	// The sender must be withdrawn when the session ends. Without that, a
+	// dropped link would leave this PC's pointer parked with nowhere to send.
+	c.conn.Close()
+	if send := waitForSender(t, senders); send != nil {
+		t.Error("the session ended without withdrawing its sender")
+	}
+}
+
+// TestTheMacTakingControlIsReportedToTheCapturePath is what stops the two
+// machines fighting over one pointer: while the Mac drives this PC, this PC
+// must not be trying to drive the Mac.
+func TestTheMacTakingControlIsReportedToTheCapturePath(t *testing.T) {
+	rig := newRig(t)
+	control := make(chan bool, 8)
+	rig.srv.OnRemoteControl = func(active bool) { control <- active }
+
+	if _, err := dial(t, rig, "000000"); err == nil {
+		t.Fatal("expected failure before pairing")
+	}
+	c, err := dial(t, rig, <-rig.codes)
+	if err != nil {
+		t.Fatalf("pair: %v", err)
+	}
+
+	mustSend(t, c, proto.TypeEnter, proto.MouseMove{X: 100, Y: 200}.Encode())
+	if active := waitForControl(t, control); !active {
+		t.Error("ENTER from the Mac should suspend this PC's capture")
+	}
+	mustSend(t, c, proto.TypeLeave, nil)
+	if active := waitForControl(t, control); active {
+		t.Error("LEAVE from the Mac should let this PC capture again")
+	}
+}
+
+func waitForSender(t *testing.T, senders chan Sender) Sender {
+	t.Helper()
+	select {
+	case send := <-senders:
+		return send
+	case <-time.After(idleTimeout + 3*time.Second):
+		t.Fatal("the session never reported its sender")
+		return nil
+	}
+}
+
+func waitForControl(t *testing.T, control chan bool) bool {
+	t.Helper()
+	select {
+	case active := <-control:
+		return active
+	case <-time.After(2 * time.Second):
+		t.Fatal("the session never reported who has control")
+		return false
+	}
+}
+
 func mustSend(t *testing.T, c *client, typ byte, body []byte) {
 	t.Helper()
 	if err := c.send(typ, body); err != nil {

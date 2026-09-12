@@ -36,6 +36,10 @@ const (
 	maxPairAttempts = 5
 )
 
+// Sender writes one message to the connected Mac. Every write in a session
+// goes through one of these, so it is safe to call from any goroutine.
+type Sender func(typ byte, body []byte) error
+
 // Server is the agent's control endpoint. One Mac at a time.
 type Server struct {
 	Addr     string
@@ -54,6 +58,16 @@ type Server struct {
 	// OnSession reports a Mac connecting and disconnecting, so the UI can
 	// show who is in control without polling.
 	OnSession func(connected bool, peer string)
+
+	// OnController hands out a Sender for the life of a session, and nil when
+	// it ends. It is how this PC's own capture path drives the Mac: the same
+	// messages, in the other direction, down the connection the Mac opened.
+	OnController func(Sender)
+
+	// OnRemoteControl reports the Mac taking and releasing control of this PC.
+	// The capture path uses it to stay out of the way — two machines both
+	// trying to own one pointer would fight over it.
+	OnRemoteControl func(active bool)
 
 	// Clipboard, when set, is kept in step with the Mac's.
 	Clipboard clipboard.Clipboard
@@ -140,6 +154,12 @@ func (s *Server) release() {
 	s.mu.Unlock()
 }
 
+func (s *Server) remoteControl(active bool) {
+	if s.OnRemoteControl != nil {
+		s.OnRemoteControl(active)
+	}
+}
+
 func (s *Server) handle(ctx context.Context, conn net.Conn) error {
 	if tcp, ok := underlyingTCP(conn); ok {
 		// Input events are tiny and latency-critical; Nagle would batch them
@@ -178,6 +198,17 @@ func (s *Server) handle(ctx context.Context, conn net.Conn) error {
 		defer writeMu.Unlock()
 		return writeFrame(conn, typ, body)
 	}
+
+	// Let this PC's capture path drive the Mac for as long as the session
+	// lasts. Handing back nil on the way out is what makes a dropped link
+	// return control here rather than leaving the pointer parked.
+	if s.OnController != nil {
+		s.OnController(send)
+		defer s.OnController(nil)
+	}
+	// A Mac that disconnects mid-control never sends LEAVE, so the release has
+	// to happen here too or this PC would never capture again.
+	defer s.remoteControl(false)
 
 	sessionCtx, endSession := context.WithCancel(ctx)
 	defer endSession()
@@ -376,7 +407,13 @@ func (s *Server) dispatch(
 			"down", k.Down, "extended", k.Extended())
 		return s.Injector.Key(k.Scancode, k.Down, k.Extended())
 
-	case proto.TypeKeyReset, proto.TypeLeave:
+	case proto.TypeKeyReset:
+		return s.Injector.ReleaseAll()
+
+	case proto.TypeLeave:
+		// The Mac has let go of this PC, so this PC may capture for itself
+		// again.
+		s.remoteControl(false)
 		return s.Injector.ReleaseAll()
 
 	case proto.TypeEnter:
@@ -384,6 +421,7 @@ func (s *Server) dispatch(
 		if err != nil {
 			return err
 		}
+		s.remoteControl(true)
 		return s.Injector.MoveTo(m.X, m.Y)
 
 	case proto.TypeClipboardText:

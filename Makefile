@@ -55,8 +55,11 @@ test-cursor:
 test-injector:
 	mac/Scripts/injector-test.sh
 
-# -unsafeptr is off for one documented case: the clipboard converts addresses
-# returned by Win32 into pointers. See internal/clipboard/clipboard_windows.go.
+# -unsafeptr is off for two documented cases, both turning an address Win32
+# handed us into a pointer: the clipboard's GlobalAlloc memory (`at` in
+# internal/clipboard/clipboard_windows.go) and the struct a hook procedure is
+# given in its LPARAM (`hookData` in internal/capture/hook_windows.go). Neither
+# address is in the Go heap, so there is nothing for the collector to move.
 test-go:
 	cd win && go test ./... \
 	  && go vet -unsafeptr=false ./... \

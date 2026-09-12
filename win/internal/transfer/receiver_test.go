@@ -37,10 +37,14 @@ func TestSafeNameCannotEscape(t *testing.T) {
 		if got == "." || got == ".." || got == "" {
 			t.Errorf("SafeName(%q) = %q, which resolves outside the directory", name, got)
 		}
-		// The decisive check: joining it cannot leave the directory.
-		joined := filepath.Clean(filepath.Join("/downloads", got))
-		if !strings.HasPrefix(joined, "/downloads/") {
-			t.Errorf("SafeName(%q) = %q, which joins to %q", name, got, joined)
+		// The decisive check: joining it cannot leave the directory. Compared
+		// with filepath rather than a literal prefix, because the separator is
+		// "\" on the machine this actually has to defend.
+		const dir = "/downloads"
+		joined := filepath.Join(dir, got)
+		if filepath.Dir(joined) != filepath.Clean(dir) {
+			t.Errorf("SafeName(%q) = %q, which joins to %q, outside %q",
+				name, got, joined, filepath.Clean(dir))
 		}
 	}
 }

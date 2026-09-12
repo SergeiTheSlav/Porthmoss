@@ -8,6 +8,15 @@
 # It moves the cursor for about a second and puts it back. Do not be typing.
 set -uo pipefail
 
+# Another Porthmoss holding an event tap makes this test flaky rather than
+# wrong: two taps compete for the same events, and which one wins varies. Say
+# so plainly instead of failing intermittently.
+if pgrep -f "Porthmoss.app/Contents/MacOS/Porthmoss" > /dev/null 2>&1; then
+    echo "Porthmoss.app is running. Quit it first — two event taps compete," >&2
+    echo "and this test will pass or fail depending on which one wins." >&2
+    exit 2
+fi
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT

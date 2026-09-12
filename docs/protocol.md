@@ -49,9 +49,21 @@ Any auth failure is answered with `0x05 ERROR` and the connection is closed.
 Coordinates are Windows virtual-desktop pixels. The Mac uses the virtual rect
 to convert its own cursor model into the normalised 0..65535 space below.
 
-## Input messages (Mac -> Agent)
+There is no message the other way: the agent is never told how big the Mac's
+desktop is, and does not need to be, because positions travel normalised and
+the Mac maps them onto whatever it has. The agent only needs a plausible
+rectangle to run its own crossing model in, and assumes the Mac's desktop
+matches its own. Anything better would mean a new message and a change on the
+Mac; if one is ever added, append it rather than changing `READY`.
 
-All positions are **absolute**, normalised to the virtual desktop:
+## Input messages (either direction)
+
+These are symmetric: the Mac sends them to drive the PC, and the agent sends
+exactly the same messages back to drive the Mac. Only one machine holds control
+at a time, so there is no ambiguity about who a given message is for — whoever
+receives `ENTER` is the target until `LEAVE`.
+
+All positions are **absolute**, normalised to the receiver's whole desktop:
 `n = round(65535 * (px - virtual_left) / (virtual_width - 1))`.
 
 Absolute is deliberate: relative deltas get run through Windows' pointer
@@ -63,9 +75,11 @@ acceleration a second time and feel wrong. The Mac owns the cursor position.
     0x20 KEY           u16 scancode, u8 down, u8 flags (bit0 = extended)
     0x21 KEY_RESET     -                   (release every key the agent holds)
 
-Key events carry **PS/2 set-1 scancodes**, not virtual key codes, so the
-agent never has to know the Mac's keyboard layout. The Mac is responsible for
-Cmd->Ctrl and other modifier remapping before it gets here.
+Key events carry **PS/2 set-1 scancodes**, not virtual key codes, so neither
+end has to know the other's keyboard layout. Each end remaps modifiers as it
+sends or receives: the Mac turns Cmd into Ctrl on the way out, and turns the
+PC's Ctrl back into Cmd on the way in (`KeyMap.modifier(forScancode:extended:)`),
+so Cmd+C and Ctrl+C both copy on whichever machine you are looking at.
 
 ## Clipboard
 
@@ -99,10 +113,18 @@ file. A rejected file is answered with ABORT and does not end the session.
 
 ## Session messages
 
-    0x30 ENTER   u16 x, u16 y   Mac took control; agent shows cursor at x,y
-    0x31 LEAVE   -              Mac released control; agent sends KEY_RESET-equivalent
+    0x30 ENTER   u16 x, u16 y   sender took control; receiver shows cursor at x,y
+    0x31 LEAVE   -              sender released control; receiver releases everything held
     0x40 PING    u64 id         either direction
     0x41 PONG    u64 id         echo of the id
+
+`ENTER` and `LEAVE` also travel both ways. A machine that receives `ENTER` must
+stop its own edge detection until `LEAVE`, or both ends will try to own one
+pointer and it will sit still on both.
+
+Only the Mac sends `PING`, because only the Mac can reconnect: the agent drops
+a session that has gone quiet for 2 s, so an idle Mac still has to prove the
+link is alive whichever way control is flowing.
 
 ## Dead-man switch
 

@@ -11,7 +11,25 @@ import Foundation
 func cursor() -> CGPoint { CGEvent(source: nil)!.location }
 
 let home = cursor()
-let screen = CGDisplayBounds(CGMainDisplayID())
+
+// Push at the outer edge of the *whole* desktop, not of the main display.
+// With a second monitor attached, the main display's right edge is an internal
+// boundary between two Mac displays, and Porthmoss quite rightly refuses to
+// cross to the PC there — which made this probe look like a drift failure when
+// it was really testing the wrong edge.
+func displays() -> [CGRect] {
+    var count: UInt32 = 0
+    guard CGGetActiveDisplayList(0, nil, &count) == .success, count > 0 else { return [] }
+    var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
+    guard CGGetActiveDisplayList(count, &ids, &count) == .success else { return [] }
+    return ids.prefix(Int(count)).map(CGDisplayBounds)
+}
+
+let all = displays()
+guard let rightmost = all.max(by: { $0.maxX < $1.maxX }) else {
+    print("no displays"); exit(2)
+}
+let screen = rightmost
 let edgeX = screen.maxX - 1
 var y = screen.midY
 

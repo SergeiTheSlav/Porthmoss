@@ -8,3 +8,6 @@ dist/
 
 # macOS
 .DS_Store
+
+# Delivery from the Windows side; not source.
+win/FROM WINDOWS/

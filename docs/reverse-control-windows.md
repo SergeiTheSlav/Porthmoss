@@ -6,6 +6,69 @@ written or run from a Mac at all.
 
 Read `docs/protocol.md` first — it is short, and everything below assumes it.
 
+## Status: built and compiling on Windows, never driven against a Mac
+
+This has been implemented in `win/internal/capture`. The rest of this document
+is kept as written, because the constraints and the traps below are still the
+constraints and the traps; what follows here is what was built, what has been
+checked, and what is still unknown.
+
+**Checked on a Windows 11 machine** (Go 1.27, no Mac present): `go build`,
+`go vet -unsafeptr=false` and `go test ./...` all pass, natively and
+cross-compiled for windows/amd64, windows/arm64 and darwin/arm64; `gofmt` is
+clean; both release binaries link; and `TestHookInstallsAndComesBackDown`
+installs the two low-level hooks and takes them down again without wedging.
+That last one also means the `MSLLHOOKSTRUCT`/`KBDLLHOOKSTRUCT` size assertions
+hold on a real Windows toolchain rather than only in theory.
+
+**Not checked, because it needs a Mac at the other end:** the crossing itself,
+whether swallowing actually stops this PC seeing the input, whether the pointer
+stays parked, and both of the questions below.
+
+```
+internal/capture/model.go          the crossing rules, ported from
+                                   PorthmossCore/CaptureModel.swift, no Win32
+internal/capture/model_test.go     the same cases as CaptureModelTests.swift,
+                                   sign-flipped: the PC's edge is the opposite
+                                   of the Mac's
+internal/capture/controller.go     model -> proto messages -> the session's
+                                   sender; the panic hotkey; the queue that
+                                   keeps I/O out of the hook procedure
+internal/capture/hook_windows.go   WH_MOUSE_LL and WH_KEYBOARD_LL on a thread
+                                   with a message loop of their own
+internal/capture/pointer_windows.go  ClipCursor and SetCursorPos
+internal/capture/hook_other.go     stubs, so the package builds and tests on
+                                   the Mac
+```
+
+The seam into the session is `server.Server.OnController`, which hands out a
+`Sender` for the life of a connection and nil when it ends, and
+`OnRemoteControl`, which reports the Mac taking this PC over so the capture
+path can stand down. Both are covered by tests in `internal/server` that run
+anywhere.
+
+**Two things need a real PC to settle.**
+
+1. *Does Windows keep delivering mouse events once the pointer is pinned
+   against the edge of the desktop?* The pointer stops dead there, so a second
+   shove may report no movement at all — and the ported rules need movement at
+   the edge to accumulate a push. `Controller.moveWhileLocalLocked` handles it
+   by pulling the pointer `edgeNudge` pixels clear when an event arrives with
+   no movement in it, which works whichever way the question goes, but only one
+   of those two paths is the one that actually runs. Watch whether a crossing
+   takes a deliberate shove or happens on a single fast approach, and tune
+   `edgeNudge` and `PushThreshold` from there.
+
+2. *Does swallowing the event hold the pointer still?* It does not on macOS,
+   and this assumes it does not on Windows either: the pointer is clipped to
+   the display and warped back to an anchor after every event. Test it the way
+   the brief says — move the mouse a long way and check the pointer has not
+   drifted — rather than assuming either answer.
+
+Two smaller things were deliberately left out, both noted in the README's
+"Known limitations": the pointer is parked rather than hidden, and the agent
+guesses the Mac's desktop size because the Mac never sends it.
+
 ## What the product is
 
 Porthmoss lets one machine's keyboard and mouse drive another over the LAN. It
@@ -108,8 +171,15 @@ Send **PS/2 set-1 scancodes**, not virtual key codes — the Mac maps them back
 itself, and applies the modifier translation (the PC's Ctrl becomes ⌘, so
 Ctrl+C works). `KeyMap.modifier(forScancode:extended:)` is that mapping.
 
-Coordinates are normalised over the Mac's whole desktop, which it reports as
-`ScreenInfo` in `READY`. The Mac does the same for the PC.
+Coordinates are normalised over the Mac's whole desktop, and the Mac maps them
+onto whatever desktop it actually has — the same way the agent maps the Mac's
+into Windows virtual-desktop pixels.
+
+Note that the agent is never told the Mac's geometry: `READY` carries
+`ScreenInfo` from the agent *to* the Mac, and there is no message going the
+other way. Only the ratio between the two desktops matters, so the agent
+assumes the Mac's is the size of its own and leaves the rest to
+`--sensitivity`. Adding a message for it would mean changing the Mac.
 
 ## How to know it works
 
