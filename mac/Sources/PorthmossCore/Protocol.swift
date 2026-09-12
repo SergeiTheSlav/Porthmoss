@@ -36,12 +36,30 @@ public enum Wire {
     public static let keyFlagExtended: UInt8 = 1 << 0
 }
 
-public enum WireError: Error, Equatable {
+public enum WireError: Error, Equatable, LocalizedError {
     case truncated
     case frameTooLarge(Int)
     case unknownType(UInt8)
     case versionMismatch(UInt16)
     case rejected(String)
+
+    /// Without this, anything that falls back to `localizedDescription` — a
+    /// dropped connection, say — surfaces as "WireError error 3", which tells
+    /// the user nothing at all.
+    public var errorDescription: String? {
+        switch self {
+        case .truncated:
+            return "The PC sent a malformed message."
+        case let .frameTooLarge(size):
+            return "The PC sent an oversized message (\(size) bytes)."
+        case let .unknownType(type):
+            return "The PC sent an unknown message type 0x\(String(type, radix: 16))."
+        case let .versionMismatch(version):
+            return "The PC speaks protocol v\(version); this Mac speaks v\(Wire.version)."
+        case let .rejected(reason):
+            return reason
+        }
+    }
 }
 
 // MARK: - Framing

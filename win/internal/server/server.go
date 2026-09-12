@@ -42,8 +42,16 @@ type Server struct {
 	Log      *slog.Logger
 
 	// OnPairingCode is called with a fresh code when an unpaired Mac connects.
-	// The CLI prints it; a tray UI would show it in a window.
+	// The console prints it; the tray UI shows it in a window.
 	OnPairingCode func(code string)
+
+	// OnListening is called once the socket is accepting connections, so the
+	// caller can show the user an address they can actually dial.
+	OnListening func(addr string)
+
+	// OnSession reports a Mac connecting and disconnecting, so the UI can
+	// show who is in control without polling.
+	OnSession func(connected bool, peer string)
 
 	mu           sync.Mutex
 	busy         bool
@@ -67,6 +75,9 @@ func (s *Server) Serve(ctx context.Context) error {
 
 	s.Log.Info("listening", "addr", raw.Addr().String(),
 		"fingerprint", s.Identity.FingerprintHex(), "paired", s.Identity.Paired())
+	if s.OnListening != nil {
+		s.OnListening(raw.Addr().String())
+	}
 
 	go func() {
 		<-ctx.Done()
@@ -133,6 +144,10 @@ func (s *Server) handle(ctx context.Context, conn net.Conn) error {
 		return err
 	}
 	s.Log.Info("controller connected", "name", name, "remote", conn.RemoteAddr())
+	if s.OnSession != nil {
+		s.OnSession(true, name)
+		defer s.OnSession(false, name)
+	}
 
 	// Drop the handshake deadline. SetDeadline set a *write* deadline too, and
 	// the loop below only ever refreshes the read side — leaving it in place

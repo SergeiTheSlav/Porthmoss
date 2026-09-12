@@ -11,8 +11,9 @@ few bytes per mouse movement.
 ## Status
 
 The control path works end to end: pairing, edge crossing, mouse, keyboard,
-scroll, and the safety releases. It is driven from a CLI; the menu bar app is
-the next step. Clipboard sync and drag-and-drop are not built yet.
+scroll, and the safety releases. Both ends have a UI — a menu bar app on the
+Mac, a notification-area icon and window on the PC. Clipboard sync and
+drag-and-drop are not built yet.
 
 ## How it works
 
@@ -103,37 +104,33 @@ make app        # wrap the Mac client in Porthmoss.app
 
 ## Running
 
-On the **Windows PC**, copy `dist/porthmoss-agent.exe` over and run it. Allow it
-through the Windows Firewall on private networks when prompted.
+On the **Windows PC**, copy `dist/porthmoss-agent.exe` over and run it. It puts
+an icon in the notification area and opens a window showing the pairing code.
+Allow it through the Windows Firewall on private networks when prompted.
 
-On the **Mac**:
+The window is WebView2, which ships with Windows 11 and most Windows 10
+installs. Without it the agent still works — it just runs headless, and
+`--console` is the way to see what it is doing.
 
-```bash
-mac/.build/debug/PorthmossMac
-```
+On the **Mac**, `make run`, or open `mac/.build/Porthmoss.app`. It lives in the
+menu bar, finds the PC on the network, and asks once for the 6-digit code the
+agent is showing. After that it reconnects on its own.
 
-It finds the agent over mDNS, shows a pairing prompt, and asks for the 6-digit
-code displayed by the agent. After that it reconnects without a code.
+The menu bar glyph fills in while the PC is being driven, so it always answers
+"where is my keyboard going right now?"
 
-```
---host <addr>     skip discovery
---edge <side>     which edge leads to the PC (default: right)
---sensitivity <n> mouse scaling on the PC
---push <points>   how hard to push through the edge
---passthrough     keep Mac Ctrl as Windows Ctrl
---discover        list agents and exit
---unpair          forget the stored pairing
---save            persist the current options
-```
+Both sides keep a headless mode for SSH sessions and test harnesses:
+`PorthmossMac --cli` and `porthmoss-agent.exe --console`.
 
 ### Permissions
 
-The Mac client needs **both** Accessibility and Input Monitoring in
+The Mac app needs **both** Accessibility and Input Monitoring in
 System Settings → Privacy & Security. Accessibility to modify events, Input
 Monitoring to see keystrokes at all; with only one, the tap fails to install.
 
-`make app` wraps the binary so it gets its own identity in those panels instead
-of inheriting the terminal's. The ad-hoc signature changes on every rebuild, so
+Run `Porthmoss.app`, not the bare binary: macOS grants those permissions to a
+code identity rather than to a path, so the raw executable inherits whatever
+the terminal was granted. The ad-hoc signature changes on every rebuild, so
 macOS re-asks until this is signed with a real Developer ID.
 
 ## Known limitations
@@ -147,7 +144,9 @@ macOS re-asks until this is signed with a real Developer ID.
   fixes this without a driver.
 - **Anti-cheat-protected games reject injected input**, which is flagged
   `LLMHF_INJECTED`.
-- No clipboard sync, no file drag, no menu bar UI yet.
+- No clipboard sync and no file drag yet.
+- The Windows window needs the WebView2 runtime. Present on Windows 11 and
+  most Windows 10 machines; without it the agent runs headless.
 
 ## Running the tests
 
@@ -175,13 +174,15 @@ mac/Sources/
   PorthmossCore/      wire codec, key map, edge-crossing model — no frameworks,
                       so the rules that decide how this feels are unit-testable
   PorthmossMac/       event tap, pinned TLS client, cursor control, CLI
+  PorthmossMac/Views/ SwiftUI menu bar app, sharing Termoss's glass language
 win/
-  cmd/porthmoss-agent entrypoint
+  cmd/porthmoss-agent entrypoint and the state-to-UI presenter
   internal/proto      wire protocol, mirrors PorthmossCore
   internal/inject     SendInput, plus a recording fake for tests on any OS
   internal/server     TLS server, handshake, dispatch, dead-man switch
   internal/pairing    certificate identity, HKDF pairing, HMAC auth
   internal/discovery  mDNS advertisement
+  internal/ui         tray icon, WebView2 window, Fluent page, console fallback
 ```
 
 ## Name

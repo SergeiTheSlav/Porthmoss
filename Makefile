@@ -19,12 +19,16 @@ run: app
 app: mac
 	cd mac && ./Scripts/make-app.sh debug
 
+# -H windowsgui drops the console window: this is a tray app. `--console`
+# reattaches to the launching terminal when output is actually wanted.
+GUI_LDFLAGS := -s -w -H windowsgui
+
 agent:
-	cd win && GOOS=windows GOARCH=amd64 go build -ldflags "-s -w" -o ../$(DIST)/porthmoss-agent.exe ./cmd/porthmoss-agent
+	cd win && GOOS=windows GOARCH=amd64 go build -ldflags "$(GUI_LDFLAGS)" -o ../$(DIST)/porthmoss-agent.exe ./cmd/porthmoss-agent
 
 # Windows on ARM (Snapdragon X, Parallels on Apple silicon).
 agent-arm64:
-	cd win && GOOS=windows GOARCH=arm64 go build -ldflags "-s -w" -o ../$(DIST)/porthmoss-agent-arm64.exe ./cmd/porthmoss-agent
+	cd win && GOOS=windows GOARCH=arm64 go build -ldflags "$(GUI_LDFLAGS)" -o ../$(DIST)/porthmoss-agent-arm64.exe ./cmd/porthmoss-agent
 
 dist: agent agent-arm64
 	@ls -lh $(DIST)

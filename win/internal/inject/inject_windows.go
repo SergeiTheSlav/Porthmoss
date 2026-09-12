@@ -12,10 +12,10 @@ import (
 var (
 	user32 = windows.NewLazySystemDLL("user32.dll")
 
-	procSendInput                    = user32.NewProc("SendInput")
-	procGetSystemMetrics             = user32.NewProc("GetSystemMetrics")
-	procEnumDisplayMonitors          = user32.NewProc("EnumDisplayMonitors")
-	procGetMonitorInfoW              = user32.NewProc("GetMonitorInfoW")
+	procSendInput                     = user32.NewProc("SendInput")
+	procGetSystemMetrics              = user32.NewProc("GetSystemMetrics")
+	procEnumDisplayMonitors           = user32.NewProc("EnumDisplayMonitors")
+	procGetMonitorInfoW               = user32.NewProc("GetMonitorInfoW")
 	procSetProcessDpiAwarenessContext = user32.NewProc("SetProcessDpiAwarenessContext")
 )
 

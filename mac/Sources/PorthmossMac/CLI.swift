@@ -69,6 +69,9 @@ enum CLI {
             case "--push": settings.capture.pushThreshold = Double(value(arg)) ?? settings.capture.pushThreshold
             case "--passthrough": settings.modifiers = .passthrough
             case "--invert-scroll": settings.invertScroll = true
+            // Consumed by the launcher to pick this front end in the first
+            // place; seeing it again here is expected, not an error.
+            case "--cli": break
             case "--discover": discoverOnly = true
             case "--unpair": shouldUnpair = true
             case "--save": shouldSave = true
