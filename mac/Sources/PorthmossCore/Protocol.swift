@@ -17,6 +17,8 @@ public enum Wire {
         case auth = 0x03
         case ready = 0x04
         case error = 0x05
+        /// The mirror of READY: the Mac describing itself to the agent.
+        case clientInfo = 0x06
 
         case mouseMove = 0x10
         case mouseButton = 0x11
@@ -112,6 +114,29 @@ public extension Wire {
     /// again. Without it, a Mac that has lost its half of the pairing is stuck:
     /// the agent rejects it and the only way back is unpairing at the PC.
     static let helloFlagNeedsPairing: UInt8 = 1 << 0
+
+    static let clientInfoFlagReverseControl: UInt8 = 1 << 0
+
+    /// CLIENT_INFO: this Mac's desktop, which edge of the *PC's* desktop this
+    /// Mac lies beyond, and whether it accepts being driven.
+    ///
+    /// Without it the agent guesses — it assumed the Mac's desktop matched its
+    /// own and took the edge from a command-line flag defaulting to "left". A
+    /// wrong guess is silent: the crossing simply never fires, whichever edge
+    /// is pushed.
+    static func clientInfoBody(
+        desktop: Rect, macBeyondEdge: ScreenEdge, reverseControl: Bool
+    ) -> [UInt8] {
+        var out: [UInt8] = []
+        for value in [desktop.x, desktop.y, desktop.width, desktop.height] {
+            out.appendBigEndian(UInt32(bitPattern: Int32(value.rounded())))
+        }
+        out.append(reverseControl ? clientInfoFlagReverseControl : 0)
+        let edge = Array(macBeyondEdge.rawValue.utf8)
+        out.append(UInt8(edge.count))
+        out.append(contentsOf: edge)
+        return out
+    }
 
     static func helloBody(name: String, needsPairing: Bool = false) -> [UInt8] {
         let nameBytes = Array(name.utf8.prefix(maxFrame - 8))

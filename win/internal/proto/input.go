@@ -149,3 +149,55 @@ func DecodeFileBegin(b []byte) (FileBegin, error) {
 	}
 	return begin, nil
 }
+
+// ClientInfoFlagReverseControl says the Mac is willing to be driven by the PC.
+// Reverse control is configured entirely from the Mac, because that is where
+// the user set up which edge leads where; having to agree a layout separately
+// on each machine is how you end up pushing an edge that nothing listens to.
+const ClientInfoFlagReverseControl = 1 << 0
+
+// ClientInfo is the Mac describing itself to the agent.
+//
+// Without it the agent has to guess: it assumed the Mac's desktop matched its
+// own, and took the edge the Mac lies beyond from a command-line flag that
+// defaulted to "left". A wrong guess there is silent — the crossing simply
+// never fires, whichever edge you push.
+type ClientInfo struct {
+	// Desktop is the Mac's whole desktop, in the Mac's own pixels.
+	Desktop Monitor
+	// Edge is the edge of the *PC's* desktop that the Mac lies beyond, already
+	// mirrored from the Mac's own setting. If the PC is to the Mac's right,
+	// the Mac is to the PC's left.
+	Edge  string
+	Flags byte
+}
+
+// ReverseControl reports whether the Mac accepts being driven.
+func (c ClientInfo) ReverseControl() bool { return c.Flags&ClientInfoFlagReverseControl != 0 }
+
+func (c ClientInfo) Encode() []byte {
+	edge := []byte(c.Edge)
+	out := make([]byte, 0, 18+len(edge))
+	out = appendI32(out, c.Desktop.Left, c.Desktop.Top, c.Desktop.Width, c.Desktop.Height)
+	out = append(out, c.Flags, byte(len(edge)))
+	out = append(out, edge...)
+	return out
+}
+
+func DecodeClientInfo(b []byte) (ClientInfo, error) {
+	if len(b) < 18 {
+		return ClientInfo{}, io.ErrUnexpectedEOF
+	}
+	length := int(b[17])
+	if len(b) < 18+length {
+		return ClientInfo{}, io.ErrUnexpectedEOF
+	}
+	return ClientInfo{
+		Desktop: Monitor{
+			Left: i32(b[0:]), Top: i32(b[4:]),
+			Width: i32(b[8:]), Height: i32(b[12:]),
+		},
+		Flags: b[16],
+		Edge:  string(b[18 : 18+length]),
+	}, nil
+}

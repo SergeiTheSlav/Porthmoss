@@ -56,6 +56,26 @@ rectangle to run its own crossing model in, and assumes the Mac's desktop
 matches its own. Anything better would mean a new message and a change on the
 Mac; if one is ever added, append it rather than changing `READY`.
 
+## CLIENT_INFO
+
+    0x06 CLIENT_INFO
+        i32 left, top, width, height   the Mac's whole desktop, in Mac pixels
+        u8  flags                      bit0 = the Mac accepts being driven
+        u8  edge_len, edge             edge of the *PC's* desktop the Mac is beyond
+
+The mirror of `READY`, sent by the Mac straight after the handshake and again
+whenever its settings change.
+
+Reverse control is configured entirely from the Mac, because that is where the
+user said which edge leads where. The PC's edge is the mirror of it — if the PC
+is beyond the Mac's right edge, the Mac is beyond the PC's left — so one
+setting describes the layout for both machines. An agent that guesses instead
+fails silently: the crossing simply never fires, whichever edge is pushed.
+
+An agent that never receives this keeps reverse control **off**. A Mac that
+cannot be driven never sends it, and a user who has not turned it on has not
+asked for it.
+
 ## Input messages (either direction)
 
 These are symmetric: the Mac sends them to drive the PC, and the agent sends

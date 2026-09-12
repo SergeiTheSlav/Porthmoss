@@ -126,7 +126,12 @@ type Controller struct {
 	model     *Model
 	send      Sender
 	suspended bool
-	anchor    Point
+	// enabled is the Mac's say-so. Reverse control is configured from there,
+	// and stays off until the Mac asks for it — an older Mac that cannot be
+	// driven never asks, and a user who has not turned it on has not asked
+	// either.
+	enabled bool
+	anchor  Point
 	// last is the previous pointer position, because a low-level mouse hook
 	// reports where the pointer is and never how far it moved.
 	last Point
@@ -211,6 +216,20 @@ func (c *Controller) Detach() {
 	}
 }
 
+// While suspended, this PC's own *pointer* input is swallowed but its keyboard
+// is not, and the asymmetry is deliberate.
+//
+// A pointer has one position. Two sources moving it means the hand moves it,
+// the Mac's next absolute position snaps it back, and the cursor visibly
+// teleports — the behaviour this suspension exists to stop. Keystrokes have no
+// such conflict: two keyboards typing into one machine interleave, which is
+// survivable and occasionally what someone wants.
+//
+// It also matters when things go wrong. If the Mac wedges mid-session, a PC
+// whose keyboard still works can be used; one that has had everything taken
+// away cannot, and its escape hotkey lives on the machine that stopped
+// responding.
+//
 // Suspend stops this PC capturing its own input while the Mac is driving it.
 // Without it the two machines would fight over one pointer: the Mac's injected
 // movement is flagged and ignored, but the user's own hand on the PC mouse is
@@ -227,6 +246,47 @@ func (c *Controller) Suspend(suspended bool) {
 	if suspended {
 		c.ForceRelease("the Mac took control of this PC")
 	}
+}
+
+// SetEnabled turns capture on or off wholesale, at the Mac's request.
+func (c *Controller) SetEnabled(on bool) {
+	c.mu.Lock()
+	if c.enabled == on {
+		c.mu.Unlock()
+		return
+	}
+	c.enabled = on
+	c.hasLast = false
+	c.mu.Unlock()
+	if !on {
+		c.ForceRelease("the Mac turned reverse control off")
+	}
+}
+
+// Config returns the crossing rules in force.
+func (c *Controller) Config() Config {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.model.Config
+}
+
+// Enabled reports whether the Mac has asked for reverse control.
+func (c *Controller) Enabled() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.enabled
+}
+
+// SetRemote replaces what this PC believes the Mac's desktop to be.
+//
+// It only affects where the cursor lands over there, not whether a crossing
+// happens: positions travel normalised. But guessing it wrong makes the Mac's
+// pointer move at the wrong speed and stop short of its own edges, which feels
+// broken long before anyone suspects the geometry.
+func (c *Controller) SetRemote(remote Rect) {
+	c.mu.Lock()
+	c.model.Remote = remote
+	c.mu.Unlock()
 }
 
 // SetConfig replaces the crossing rules. Control comes home first when the
@@ -267,6 +327,16 @@ func (c *Controller) Close() {
 // virtual-desktop pixels.
 func (c *Controller) MouseMoved(position Point) bool {
 	c.mu.Lock()
+	if c.suspended {
+		// The Mac is driving this PC, so its injected positions are the only
+		// thing that should move the pointer. Passing the user's own mouse
+		// through as well gives two sources for one pointer: the hand moves
+		// it, the next absolute position from the Mac snaps it back, and the
+		// cursor appears to teleport. One cursor, one source of truth.
+		c.hasLast = false
+		c.mu.Unlock()
+		return true
+	}
 	if !c.active() {
 		c.hasLast = false
 		c.mu.Unlock()
@@ -352,6 +422,13 @@ func (c *Controller) nudgeTargetLocked(position Point) (Point, bool) {
 // MouseButton forwards a press or release. Buttons only matter while the Mac
 // has control; otherwise they belong to whatever is on this PC.
 func (c *Controller) MouseButton(button byte, down bool) bool {
+	c.mu.Lock()
+	if c.suspended {
+		c.mu.Unlock()
+		return true
+	}
+	c.mu.Unlock()
+
 	if !c.remote() {
 		return false
 	}
@@ -361,6 +438,13 @@ func (c *Controller) MouseButton(button byte, down bool) bool {
 
 // MouseWheel forwards a scroll, in whole wheel notches.
 func (c *Controller) MouseWheel(dx, dy int16) bool {
+	c.mu.Lock()
+	if c.suspended {
+		c.mu.Unlock()
+		return true
+	}
+	c.mu.Unlock()
+
 	if !c.remote() {
 		return false
 	}
@@ -420,7 +504,9 @@ func (c *Controller) ForceRelease(reason string) {
 
 // active reports whether there is a Mac to send to and nothing else is already
 // driving this PC. Callers must hold the mutex.
-func (c *Controller) active() bool { return c.send != nil && !c.suspended }
+func (c *Controller) active() bool {
+	return c.send != nil && c.enabled && !c.suspended
+}
 
 func (c *Controller) remote() bool {
 	c.mu.Lock()

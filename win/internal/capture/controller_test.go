@@ -121,6 +121,9 @@ func newRig(t *testing.T) (*Controller, *recorder, *fakePointer) {
 		},
 	})
 	t.Cleanup(c.Close)
+	// Reverse control is off until the Mac asks for it, so every test that
+	// expects capture has to say so.
+	c.SetEnabled(true)
 	c.Attach(rec.send)
 	return c, rec, pointer
 }
@@ -226,8 +229,8 @@ func TestTheMacTakingControlSuspendsCapture(t *testing.T) {
 	c.MouseMoved(Point{X: 20, Y: 720})
 	c.MouseMoved(Point{X: 10, Y: 720})
 	for range 20 {
-		if c.MouseMoved(Point{X: 0, Y: 720}) {
-			t.Fatal("input was swallowed while the Mac was driving this PC")
+		if c.MouseMoved(Point{X: 0, Y: 720}) == false {
+			t.Fatal("the PC's own mouse was let through while the Mac was driving it")
 		}
 	}
 	if c.IsRemote() {
@@ -238,6 +241,39 @@ func TestTheMacTakingControlSuspendsCapture(t *testing.T) {
 	push(t, c)
 	if !c.IsRemote() {
 		t.Error("capture should work again once the Mac hands this PC back")
+	}
+}
+
+// TestTheMacDrivingLeavesOneCursor is why the test above changed.
+//
+// Passing the PC's own pointer input through while the Mac drives it gives one
+// pointer two sources: the hand moves it, the Mac's next absolute position
+// snaps it back, and the cursor visibly teleports. Reported from a real
+// session, and the reason pointer input is now swallowed while suspended.
+func TestTheMacDrivingLeavesOneCursor(t *testing.T) {
+	c, rec, _ := newRig(t)
+	c.Suspend(true)
+
+	for _, p := range []Point{{X: 900, Y: 400}, {X: 400, Y: 200}, {X: 1500, Y: 900}} {
+		if !c.MouseMoved(p) {
+			t.Errorf("movement to %v reached Windows and would fight the Mac's cursor", p)
+		}
+	}
+	if !c.MouseButton(proto.ButtonLeft, true) {
+		t.Error("a click on the PC reached Windows while the Mac was driving it")
+	}
+	if !c.MouseWheel(0, 3) {
+		t.Error("a scroll on the PC reached Windows while the Mac was driving it")
+	}
+
+	// The keyboard is deliberately not swallowed: two keyboards interleaving is
+	// survivable, and a wedged Mac must not leave this PC unable to type.
+	if c.Key(0x2E, true, false) {
+		t.Error("the PC's keyboard was swallowed; a wedged Mac would lock the user out")
+	}
+
+	if len(rec.frames()) != 0 {
+		t.Errorf("sent %d frames to the Mac while suspended", len(rec.frames()))
 	}
 }
 
@@ -441,5 +477,44 @@ func TestArrivingAtTheEdgeAndStoppingDoesNotMoveThePointer(t *testing.T) {
 	defer pointer.mu.Unlock()
 	if len(pointer.warped) != 0 {
 		t.Errorf("the pointer was pulled off the edge while in use: %v", pointer.warped)
+	}
+}
+
+// TestCaptureStaysOffUntilTheMacAsks covers the gate itself. Reverse control
+// is configured on the Mac, and a PC that captured before being asked would
+// swallow the user's own input on the strength of a default.
+func TestCaptureStaysOffUntilTheMacAsks(t *testing.T) {
+	pointer := &fakePointer{anchor: Point{X: 1280, Y: 720}}
+	rec := &recorder{}
+	config := DefaultConfig()
+	config.Edge = EdgeLeft
+	c := New(Options{
+		Config:        config,
+		RemoteDesktop: macDesktop,
+		Pointer:       pointer,
+		Screens: func() (proto.ScreenInfo, error) {
+			return proto.ScreenInfo{
+				Virtual:  proto.Monitor{Left: 0, Top: 0, Width: 2560, Height: 1440},
+				Monitors: []proto.Monitor{{Left: 0, Top: 0, Width: 2560, Height: 1440, Primary: true}},
+			}, nil
+		},
+	})
+	t.Cleanup(c.Close)
+	c.Attach(rec.send)
+
+	// Shove at the edge as hard as the crossing test does.
+	for i := range 40 {
+		c.MouseMoved(Point{X: 0, Y: 400 + float64(i%3)})
+	}
+	if c.IsRemote() {
+		t.Error("captured without the Mac asking for reverse control")
+	}
+	if len(rec.frames()) != 0 {
+		t.Errorf("sent %d frames with reverse control off", len(rec.frames()))
+	}
+
+	c.SetEnabled(true)
+	if !c.Enabled() {
+		t.Fatal("SetEnabled(true) did not take")
 	}
 }

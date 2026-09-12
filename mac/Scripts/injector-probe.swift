@@ -36,6 +36,11 @@ check("a Windows scancode maps back to a Mac key",
 check("the PC's Ctrl becomes Command",
       KeyMap.modifier(forScancode: 0x1d, extended: false) == .leftCommand)
 
+// Park in the top-left corner first. This presses a real button and a real
+// modifier into the live system, and doing that wherever the cursor happens to
+// be has already flipped a setting in a window that was underneath it.
+injector.moveTo(x: 0, y: 0)
+usleep(120_000)
 injector.button(.left, down: true)
 injector.key(scancode: 0x1d, down: true, extended: false)
 injector.releaseAll()

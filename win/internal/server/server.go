@@ -64,6 +64,12 @@ type Server struct {
 	// messages, in the other direction, down the connection the Mac opened.
 	OnController func(Sender)
 
+	// OnClientInfo reports what the Mac has said about itself: its desktop
+	// size, which edge of this PC's desktop it lies beyond, and whether it
+	// accepts being driven at all. Reverse control is configured from the Mac,
+	// so this is where the capture path learns what to do.
+	OnClientInfo func(proto.ClientInfo)
+
 	// OnRemoteControl reports the Mac taking and releasing control of this PC.
 	// The capture path uses it to stay out of the way — two machines both
 	// trying to own one pointer would fight over it.
@@ -423,6 +429,19 @@ func (s *Server) dispatch(
 		}
 		s.remoteControl(true)
 		return s.Injector.MoveTo(m.X, m.Y)
+
+	case proto.TypeClientInfo:
+		info, err := proto.DecodeClientInfo(frame.Body)
+		if err != nil {
+			return err
+		}
+		s.Log.Info("the Mac described itself",
+			"desktop", fmt.Sprintf("%dx%d", info.Desktop.Width, info.Desktop.Height),
+			"mac_beyond_edge", info.Edge, "reverse_control", info.ReverseControl())
+		if s.OnClientInfo != nil {
+			s.OnClientInfo(info)
+		}
+		return nil
 
 	case proto.TypeClipboardText:
 		if clip == nil {

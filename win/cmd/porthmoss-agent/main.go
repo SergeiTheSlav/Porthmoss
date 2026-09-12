@@ -188,6 +188,31 @@ func run() error {
 		// While the Mac is driving this PC, this PC must not try to drive the
 		// Mac: two machines fighting over one pointer is a cursor that goes
 		// nowhere on either.
+		// Reverse control is configured on the Mac: which edge leads where, and
+		// whether it is wanted at all. Guessing either of those from a flag
+		// here is how you end up pushing an edge that nothing listens to.
+		OnClientInfo: func(info proto.ClientInfo) {
+			if capturer == nil {
+				return
+			}
+			if edge, err := capture.ParseEdge(info.Edge); err == nil {
+				config := capturer.Config()
+				config.Edge = edge
+				capturer.SetConfig(config)
+			} else {
+				log.Warn("the Mac named an edge this agent does not know", "edge", info.Edge)
+			}
+			if d := info.Desktop; d.Width > 0 && d.Height > 0 {
+				capturer.SetRemote(capture.Rect{
+					X: float64(d.Left), Y: float64(d.Top),
+					W: float64(d.Width), H: float64(d.Height),
+				})
+			}
+			capturer.SetEnabled(info.ReverseControl())
+			log.Info("reverse control configured by the Mac",
+				"enabled", info.ReverseControl(), "mac_beyond_edge", info.Edge)
+		},
+
 		OnRemoteControl: func(active bool) {
 			if capturer != nil {
 				capturer.Suspend(active)

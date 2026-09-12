@@ -92,9 +92,23 @@ final class Session: @unchecked Sendable {
         // Every handler is installed; release anything the agent sent while we
         // were still setting up.
         connection.beginDelivery()
+        announceSelf()
 
         startHeartbeat()
         onEvent(.ready("Ready. Push the \(settings.capture.edge.rawValue) edge to take over the PC."))
+    }
+
+    /// Tells the agent about this Mac: how big its desktop is, which edge of
+    /// the PC's desktop it lies beyond, and whether it accepts being driven.
+    func announceSelf() {
+        let desktop = Displays.union(Displays.all())
+        connection.post(.clientInfo, Wire.clientInfoBody(
+            desktop: desktop,
+            // The PC's edge is the mirror of this Mac's: one setting, here,
+            // describes the layout for both machines.
+            macBeyondEdge: settings.capture.edge.mirrored,
+            reverseControl: settings.allowPCControl
+        ))
     }
 
     /// Takes new settings without tearing the link down.
@@ -111,6 +125,14 @@ final class Session: @unchecked Sendable {
         }
         settings = new
         model.config = new.capture
+        // The edge and the toggle both live in these settings, and the agent
+        // needs to hear about either changing.
+        announceSelf()
+
+        // Turning it off must take effect now, not at the next crossing.
+        if !new.allowPCControl {
+            releaseFromPC(reason: "this Mac no longer accepts control from the PC")
+        }
     }
 
     func stop() {
@@ -184,7 +206,8 @@ final class Session: @unchecked Sendable {
             return false
         }
         // While the PC has control, this Mac is a target: its own edge
-        // detection must stay out of the way.
+        // detection must stay out of the way, and its own pointer input is
+        // swallowed so there is one cursor rather than two fighting.
         //
         // Note what this does *not* do: the event is passed through, not
         // swallowed, so the user's own trackpad still moves this Mac's cursor
@@ -195,7 +218,27 @@ final class Session: @unchecked Sendable {
         // locks the user out of their own laptop, with the escape hotkey
         // living on the machine that has stopped responding. A cursor being
         // fought over is a nuisance; a laptop that ignores its owner is not.
-        if isControlledByPC { return false }
+        if isControlledByPC {
+            switch type {
+            case .keyDown, .keyUp, .flagsChanged:
+                // The keyboard deliberately still works. Two keyboards
+                // interleaving is survivable; a wedged PC leaving this Mac
+                // unable to type is not, and the escape below needs it.
+                if type == .keyDown, isPanicHotkey(
+                    keycode: UInt16(event.getIntegerValueField(.keyboardEventKeycode)),
+                    flags: event.flags
+                ) {
+                    releaseFromPC(reason: "released with the escape hotkey")
+                    return true
+                }
+                return false
+            default:
+                // Pointer input: swallowed. A pointer has one position, and
+                // two sources moving it means the hand moves it, the PC's next
+                // absolute position snaps it back, and the cursor teleports.
+                return true
+            }
+        }
         switch type {
         case .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged:
             return handleMotion(event, dragging: type == .leftMouseDragged)
