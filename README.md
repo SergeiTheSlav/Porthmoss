@@ -157,11 +157,14 @@ make test-mac    # Mac: wire codec, key mapping, edge crossing
 ```
 
 `make test-mac` needs the full Xcode toolchain — swift-testing's macros are not
-included in the Command Line Tools, and the Xcode license must be accepted once:
+included in the Command Line Tools. If `xcode-select -p` still points at
+`/Library/Developer/CommandLineTools`, switch it and accept the licence once,
+**in this order** (`xcodebuild` refuses to run until the active directory is
+already Xcode):
 
 ```bash
-sudo xcodebuild -license accept
 sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+sudo xcodebuild -license accept
 ```
 
 ## Layout
