@@ -45,7 +45,8 @@ struct Settings {
             agentHost: agentHost, agentPort: agentPort, clientName: clientName,
             edge: capture.edge.rawValue, sensitivity: capture.sensitivity,
             pushThreshold: capture.pushThreshold, invertScroll: invertScroll,
-            pixelsPerNotch: pixelsPerNotch, passthroughModifiers: nil
+            pixelsPerNotch: pixelsPerNotch,
+            passthroughModifiers: modifiers.control.code == 0x1D
         )
         let url = Settings.fileURL
         try FileManager.default.createDirectory(

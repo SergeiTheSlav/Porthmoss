@@ -30,6 +30,15 @@ type input struct {
 	union [32]byte
 }
 
+// Compile-time assertion that our INPUT matches Windows'. A mismatch would make
+// SendInput read garbage, and there is no way to catch that from a Mac — so it
+// is caught by the cross-compiler instead. Both arrays are zero-length only
+// when the sizes are equal; either direction of drift is a negative length.
+var (
+	_ [unsafe.Sizeof(input{}) - inputSize]byte
+	_ [inputSize - unsafe.Sizeof(input{})]byte
+)
+
 const (
 	inputMouse    = 0
 	inputKeyboard = 1
