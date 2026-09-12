@@ -105,10 +105,12 @@ final class AgentConnection: @unchecked Sendable {
 
     /// Connects and completes the handshake. `codeProvider` is asked for the
     /// 6-digit pairing code only when the agent says it has never been paired.
+    /// It receives the certificate fingerprint actually presented, so the UI
+    /// can show the user which machine they are about to trust.
     func start(
         clientName: String,
         storedSecret: Data?,
-        codeProvider: @escaping @Sendable () -> String?,
+        codeProvider: @escaping @Sendable (Data) -> String?,
         completion: @escaping @Sendable (Result<(RemoteScreens, Data, Data), Error>) -> Void
     ) {
         onStateChange(.connecting)
@@ -143,7 +145,7 @@ final class AgentConnection: @unchecked Sendable {
     private func handshake(
         clientName: String,
         storedSecret: Data?,
-        codeProvider: @escaping @Sendable () -> String?,
+        codeProvider: @escaping @Sendable (Data) -> String?,
         completion: @escaping @Sendable (Result<(RemoteScreens, Data, Data), Error>) -> Void
     ) {
         do {
@@ -170,7 +172,7 @@ final class AgentConnection: @unchecked Sendable {
                     let secret: Data
                     if needsPairing {
                         self.onStateChange(.needsPairingCode)
-                        guard let code = codeProvider() else {
+                        guard let code = codeProvider(fingerprint) else {
                             return completion(.failure(WireError.rejected("pairing cancelled")))
                         }
                         secret = Pairing.deriveSecret(code: code, fingerprint: fingerprint)

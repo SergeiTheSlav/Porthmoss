@@ -11,6 +11,11 @@ all: mac agent
 mac:
 	cd mac && swift build
 
+# The GUI needs the bundle: macOS grants Accessibility and Input Monitoring to
+# a code identity, not a path, so run Porthmoss.app rather than the raw binary.
+run: app
+	open mac/.build/Porthmoss.app
+
 app: mac
 	cd mac && ./Scripts/make-app.sh debug
 
