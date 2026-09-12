@@ -17,8 +17,6 @@ public enum Wire {
         case auth = 0x03
         case ready = 0x04
         case error = 0x05
-        /// The mirror of READY: the Mac describing itself to the agent.
-        case clientInfo = 0x06
 
         case mouseMove = 0x10
         case mouseButton = 0x11
@@ -115,29 +113,6 @@ public extension Wire {
     /// the agent rejects it and the only way back is unpairing at the PC.
     static let helloFlagNeedsPairing: UInt8 = 1 << 0
 
-    static let clientInfoFlagReverseControl: UInt8 = 1 << 0
-
-    /// CLIENT_INFO: this Mac's desktop, which edge of the *PC's* desktop this
-    /// Mac lies beyond, and whether it accepts being driven.
-    ///
-    /// Without it the agent guesses — it assumed the Mac's desktop matched its
-    /// own and took the edge from a command-line flag defaulting to "left". A
-    /// wrong guess is silent: the crossing simply never fires, whichever edge
-    /// is pushed.
-    static func clientInfoBody(
-        desktop: Rect, macBeyondEdge: ScreenEdge, reverseControl: Bool
-    ) -> [UInt8] {
-        var out: [UInt8] = []
-        for value in [desktop.x, desktop.y, desktop.width, desktop.height] {
-            out.appendBigEndian(UInt32(bitPattern: Int32(value.rounded())))
-        }
-        out.append(reverseControl ? clientInfoFlagReverseControl : 0)
-        let edge = Array(macBeyondEdge.rawValue.utf8)
-        out.append(UInt8(edge.count))
-        out.append(contentsOf: edge)
-        return out
-    }
-
     static func helloBody(name: String, needsPairing: Bool = false) -> [UInt8] {
         let nameBytes = Array(name.utf8.prefix(maxFrame - 8))
         var out: [UInt8] = []
@@ -226,33 +201,6 @@ public extension Wire {
         var out: [UInt8] = []
         out.appendBigEndian(id)
         return out
-    }
-
-    static func decodeMouseMove(_ body: [UInt8]) throws -> (x: UInt16, y: UInt16) {
-        guard body.count >= 4 else { throw WireError.truncated }
-        return (UInt16(body[0]) << 8 | UInt16(body[1]), UInt16(body[2]) << 8 | UInt16(body[3]))
-    }
-
-    static func decodeMouseButton(_ body: [UInt8]) throws -> (button: UInt8, down: Bool) {
-        guard body.count >= 2 else { throw WireError.truncated }
-        return (body[0], body[1] == 1)
-    }
-
-    static func decodeMouseWheel(_ body: [UInt8]) throws -> (dx: Int16, dy: Int16) {
-        guard body.count >= 4 else { throw WireError.truncated }
-        return (
-            Int16(bitPattern: UInt16(body[0]) << 8 | UInt16(body[1])),
-            Int16(bitPattern: UInt16(body[2]) << 8 | UInt16(body[3]))
-        )
-    }
-
-    static func decodeKey(_ body: [UInt8]) throws -> (scancode: UInt16, down: Bool, extended: Bool) {
-        guard body.count >= 4 else { throw WireError.truncated }
-        return (
-            UInt16(body[0]) << 8 | UInt16(body[1]),
-            body[2] == 1,
-            body[3] & keyFlagExtended != 0
-        )
     }
 
     static func decodeU64(_ body: [UInt8]) throws -> UInt64 {

@@ -37,13 +37,8 @@ struct PorthmossApp: App {
     /// Which way input is flowing, at a glance. The filled variants mean input
     /// is crossing right now; the arrow says which way.
     private var menuBarGlyph: String {
-        switch model.direction {
-        case .drivingPC: return "arrow.right.circle.fill"
-        case .drivenByPC: return "arrow.left.circle.fill"
-        case .none: return model.isConnected
-            ? "arrow.left.arrow.right.circle"
-            : "arrow.left.arrow.right"
-        }
+        if model.isControllingPC { return "arrow.right.circle.fill" }
+        return model.isConnected ? "arrow.left.arrow.right.circle" : "arrow.left.arrow.right"
     }
 
     var body: some Scene {

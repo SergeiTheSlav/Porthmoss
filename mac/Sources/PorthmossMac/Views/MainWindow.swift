@@ -115,11 +115,7 @@ private struct StatusPanel: View {
         case let .connecting(host): return "Connecting to \(host)"
         case let .pairing(host): return "Pairing with \(host)"
         case let .connected(host):
-            switch model.direction {
-            case .drivingPC: return "Controlling \(host)"
-            case .drivenByPC: return "\(host) is controlling this Mac"
-            case .none: return "Connected to \(host)"
-            }
+            return model.isControllingPC ? "Controlling \(host)" : "Connected to \(host)"
         case .failed: return "Couldn’t connect"
         }
     }
@@ -135,11 +131,7 @@ private struct StatusPanel: View {
     private var icon: String {
         switch model.state {
         case .connected:
-            switch model.direction {
-            case .drivingPC: return "arrow.right.circle.fill"
-            case .drivenByPC: return "arrow.left.circle.fill"
-            case .none: return "checkmark.circle.fill"
-            }
+            return model.isControllingPC ? "arrow.right.circle.fill" : "checkmark.circle.fill"
         case .failed: return "exclamationmark.triangle.fill"
         default: return "display"
         }
@@ -148,13 +140,7 @@ private struct StatusPanel: View {
     private var dotColour: Color {
         switch model.state {
         case .connected:
-            switch model.direction {
-            case .drivingPC: return .blue
-            // Purple rather than blue: being driven is a different situation
-            // from driving, and the two should not look alike at a glance.
-            case .drivenByPC: return .purple
-            case .none: return .green
-            }
+            return model.isControllingPC ? .blue : .green
         case .failed: return .orange
         default: return .secondary
         }

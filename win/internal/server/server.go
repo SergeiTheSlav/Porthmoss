@@ -36,10 +36,6 @@ const (
 	maxPairAttempts = 5
 )
 
-// Sender writes one message to the connected Mac. Every write in a session
-// goes through one of these, so it is safe to call from any goroutine.
-type Sender func(typ byte, body []byte) error
-
 // Server is the agent's control endpoint. One Mac at a time.
 type Server struct {
 	Addr     string
@@ -58,27 +54,6 @@ type Server struct {
 	// OnSession reports a Mac connecting and disconnecting, so the UI can
 	// show who is in control without polling.
 	OnSession func(connected bool, peer string)
-
-	// OnController hands out a Sender for the life of a session, and nil when
-	// it ends. It is how this PC's own capture path drives the Mac: the same
-	// messages, in the other direction, down the connection the Mac opened.
-	OnController func(Sender)
-
-	// OnClientInfo reports what the Mac has said about itself: its desktop
-	// size, which edge of this PC's desktop it lies beyond, and whether it
-	// accepts being driven at all. Reverse control is configured from the Mac,
-	// so this is where the capture path learns what to do.
-	OnClientInfo func(proto.ClientInfo)
-
-	// OnRemoteInput is called for every input message from the Mac, so the
-	// capture path can tell "the Mac is driving" from "the Mac said it was
-	// driving some time ago and has since gone quiet".
-	OnRemoteInput func()
-
-	// OnRemoteControl reports the Mac taking and releasing control of this PC.
-	// The capture path uses it to stay out of the way — two machines both
-	// trying to own one pointer would fight over it.
-	OnRemoteControl func(active bool)
 
 	// Clipboard, when set, is kept in step with the Mac's.
 	Clipboard clipboard.Clipboard
@@ -165,12 +140,6 @@ func (s *Server) release() {
 	s.mu.Unlock()
 }
 
-func (s *Server) remoteControl(active bool) {
-	if s.OnRemoteControl != nil {
-		s.OnRemoteControl(active)
-	}
-}
-
 func (s *Server) handle(ctx context.Context, conn net.Conn) error {
 	if tcp, ok := underlyingTCP(conn); ok {
 		// Input events are tiny and latency-critical; Nagle would batch them
@@ -209,17 +178,6 @@ func (s *Server) handle(ctx context.Context, conn net.Conn) error {
 		defer writeMu.Unlock()
 		return writeFrame(conn, typ, body)
 	}
-
-	// Let this PC's capture path drive the Mac for as long as the session
-	// lasts. Handing back nil on the way out is what makes a dropped link
-	// return control here rather than leaving the pointer parked.
-	if s.OnController != nil {
-		s.OnController(send)
-		defer s.OnController(nil)
-	}
-	// A Mac that disconnects mid-control never sends LEAVE, so the release has
-	// to happen here too or this PC would never capture again.
-	defer s.remoteControl(false)
 
 	sessionCtx, endSession := context.WithCancel(ctx)
 	defer endSession()
@@ -385,19 +343,6 @@ func (s *Server) dispatch(
 	incoming *transfer.Receiver,
 	frame proto.Frame,
 ) error {
-	// Noting arrival keeps the capture path's suspension alive. Without it,
-	// "the Mac is driving this PC" and "the Mac said so once and has since
-	// gone quiet" look identical, and this PC's own mouse stays swallowed for
-	// the second one — a mouse that does nothing being a far worse failure
-	// than the teleport that swallowing exists to prevent.
-	switch frame.Type {
-	case proto.TypeMouseMove, proto.TypeMouseButton, proto.TypeMouseWheel,
-		proto.TypeKey, proto.TypeKeyReset, proto.TypeEnter:
-		if s.OnRemoteInput != nil {
-			s.OnRemoteInput()
-		}
-	}
-
 	switch frame.Type {
 	case proto.TypeMouseMove:
 		m, err := proto.DecodeMouseMove(frame.Body)
@@ -437,7 +382,6 @@ func (s *Server) dispatch(
 	case proto.TypeLeave:
 		// The Mac has let go of this PC, so this PC may capture for itself
 		// again.
-		s.remoteControl(false)
 		return s.Injector.ReleaseAll()
 
 	case proto.TypeEnter:
@@ -445,21 +389,7 @@ func (s *Server) dispatch(
 		if err != nil {
 			return err
 		}
-		s.remoteControl(true)
-		return s.Injector.MoveTo(m.X, m.Y)
-
-	case proto.TypeClientInfo:
-		info, err := proto.DecodeClientInfo(frame.Body)
-		if err != nil {
-			return err
-		}
-		s.Log.Info("the Mac described itself",
-			"desktop", fmt.Sprintf("%dx%d", info.Desktop.Width, info.Desktop.Height),
-			"mac_beyond_edge", info.Edge, "reverse_control", info.ReverseControl())
-		if s.OnClientInfo != nil {
-			s.OnClientInfo(info)
-		}
-		return nil
+		return s.Injector.EnterAt(m.X, m.Y)
 
 	case proto.TypeClipboardText:
 		if clip == nil {

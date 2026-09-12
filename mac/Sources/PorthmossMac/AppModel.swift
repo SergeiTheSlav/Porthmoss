@@ -72,13 +72,13 @@ final class AppModel: ObservableObject {
     @Published private(set) var screens: RemoteScreens?
     @Published private(set) var discovered: [Discovery.Agent] = []
     @Published private(set) var saved: [PairingStore.SavedPC] = []
-    /// Which way input is flowing. The UI needs both directions: a Mac being
-    /// driven by the PC is not the same thing as a Mac sitting connected and
-    /// idle, and it used to render identically.
+    /// Whether this Mac is driving the PC. A typed state rather than a
+    /// prefix match on the status line, which used to mean every message that
+    /// was not "Controlling…" read as control having come home — a file
+    /// transfer reporting "Sending…" flipped the menu bar mid-session.
     @Published private(set) var direction: ControlDirection = .none
 
     var isControllingPC: Bool { direction == .drivingPC }
-    var isDrivenByPC: Bool { direction == .drivenByPC }
     /// Non-nil while a pairing sheet should be on screen.
     @Published var pairingRequest: PairingRequest?
 
@@ -296,9 +296,7 @@ final class AppModel: ObservableObject {
         switch event {
         case .startedDrivingPC:
             direction = .drivingPC
-        case .startedBeingDriven:
-            direction = .drivenByPC
-        case .stoppedDrivingPC, .stoppedBeingDriven:
+        case .stoppedDrivingPC:
             direction = .none
         case let .connectionLost(reason):
             direction = .none

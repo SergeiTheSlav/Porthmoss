@@ -51,10 +51,6 @@ test: test-go test-mac
 test-cursor:
 	mac/Scripts/cursor-drift-test.sh
 
-# Does input from the PC actually drive this Mac? Also moves the cursor.
-test-injector:
-	mac/Scripts/injector-test.sh
-
 # -unsafeptr is off for two documented cases, both turning an address Win32
 # handed us into a pointer: the clipboard's GlobalAlloc memory (`at` in
 # internal/clipboard/clipboard_windows.go) and the struct a hook procedure is

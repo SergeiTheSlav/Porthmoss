@@ -7,7 +7,19 @@ import "github.com/janjamscikov/porthmoss/win/internal/proto"
 // required to be safe for concurrent use; the server drives one from a single
 // goroutine.
 type Injector interface {
-	// MoveTo warps the cursor to a normalised 0..65535 point on the virtual desktop.
+	// EnterAt places the cursor at a normalised 0..65535 point on the virtual
+	// desktop, and makes that the baseline for later movement. Sent once, when
+	// the Mac crosses over.
+	EnterAt(x, y uint16) error
+
+	// MoveTo applies the movement since the previous request to wherever the
+	// pointer actually is now.
+	//
+	// Not an absolute placement, despite the absolute coordinates on the wire.
+	// The PC's own mouse is still live while the Mac drives it, and if the user
+	// nudges it, an absolute placement undoes that nudge on the very next
+	// message — the pointer visibly teleports back. Applying the difference
+	// instead means both mice move one cursor, and neither cancels the other.
 	MoveTo(x, y uint16) error
 	// Button presses or releases a mouse button.
 	Button(button byte, down bool) error

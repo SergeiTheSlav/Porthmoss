@@ -26,9 +26,6 @@ const (
 	TypeAuth      = 0x03
 	TypeReady     = 0x04
 	TypeError     = 0x05
-	// TypeClientInfo is the mirror of READY: the Mac describing itself, sent
-	// straight after the handshake and again whenever its settings change.
-	TypeClientInfo = 0x06
 
 	TypeMouseMove   = 0x10
 	TypeMouseButton = 0x11

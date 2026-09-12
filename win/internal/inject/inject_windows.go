@@ -3,6 +3,7 @@ package inject
 import (
 	"encoding/binary"
 	"fmt"
+	"math"
 	"unsafe"
 
 	"github.com/janjamscikov/porthmoss/win/internal/proto"
@@ -14,6 +15,7 @@ var (
 
 	procSendInput                     = user32.NewProc("SendInput")
 	procGetSystemMetrics              = user32.NewProc("GetSystemMetrics")
+	procGetCursorPos                  = user32.NewProc("GetCursorPos")
 	procEnumDisplayMonitors           = user32.NewProc("EnumDisplayMonitors")
 	procGetMonitorInfoW               = user32.NewProc("GetMonitorInfoW")
 	procSetProcessDpiAwarenessContext = user32.NewProc("SetProcessDpiAwarenessContext")
@@ -83,6 +85,11 @@ const (
 type Windows struct {
 	heldKeys    map[uint16]bool // scancode -> extended
 	heldButtons map[byte]bool
+
+	// lastX, lastY is the position the Mac last asked for, in normalised
+	// coordinates. Movement is applied as the difference from it, so the PC's
+	// own mouse is never undone.
+	lastX, lastY uint16
 }
 
 func New() (*Windows, error) {
@@ -133,9 +140,73 @@ func keybdInput(scancode uint16, flags uint32) input {
 	return in
 }
 
+// EnterAt places the pointer where the Mac says it crossed over, absolutely,
+// and makes that the baseline for the movement that follows.
+func (w *Windows) EnterAt(x, y uint16) error {
+	w.lastX, w.lastY = x, y
+	return w.warp(x, y)
+}
+
+// MoveTo applies the Mac's movement to wherever the pointer actually is.
+//
+// The coordinates on the wire are absolute, but placing the pointer at them
+// would undo anything the PC's own mouse did in between: the user nudges it,
+// the next message from the Mac snaps it back, and the cursor visibly
+// teleports. Taking the difference instead lets both mice move one cursor,
+// with neither cancelling the other.
 func (w *Windows) MoveTo(x, y uint16) error {
+	screens, err := w.Screens()
+	if err != nil {
+		return err
+	}
+	virtual := screens.Virtual
+
+	deltaX := (float64(x) - float64(w.lastX)) / 65535 * float64(virtual.Width-1)
+	deltaY := (float64(y) - float64(w.lastY)) / 65535 * float64(virtual.Height-1)
+	w.lastX, w.lastY = x, y
+
+	current, ok := w.cursor()
+	if !ok {
+		// No idea where the pointer is, so the absolute position the Mac asked
+		// for is the best answer available.
+		return w.warp(x, y)
+	}
+
+	targetX := clampFloat(float64(current.X)+deltaX,
+		float64(virtual.Left), float64(virtual.Left+virtual.Width-1))
+	targetY := clampFloat(float64(current.Y)+deltaY,
+		float64(virtual.Top), float64(virtual.Top+virtual.Height-1))
+
+	return w.warp(
+		normalise(targetX, float64(virtual.Left), float64(virtual.Width)),
+		normalise(targetY, float64(virtual.Top), float64(virtual.Height)),
+	)
+}
+
+// warp places the pointer at a normalised point. Absolute rather than relative
+// so Windows' pointer acceleration is not applied to it a second time.
+func (w *Windows) warp(x, y uint16) error {
 	return w.send(mouseInput(int32(x), int32(y), 0,
 		mouseeventfMove|mouseeventfAbsolute|mouseeventfVirtualDesk|mouseeventfNoCoalesce))
+}
+
+type point struct{ X, Y int32 }
+
+// cursor reads where the pointer actually is, which is not necessarily where
+// this agent last put it: the user's own hand is still on the PC's mouse.
+func (w *Windows) cursor() (point, bool) {
+	var p point
+	ret, _, _ := procGetCursorPos.Call(uintptr(unsafe.Pointer(&p)))
+	return p, ret != 0
+}
+
+func clampFloat(v, low, high float64) float64 { return math.Min(math.Max(v, low), high) }
+
+func normalise(pixel, origin, size float64) uint16 {
+	if size <= 1 {
+		return 0
+	}
+	return uint16(clampFloat(math.Round((pixel-origin)/(size-1)*65535), 0, 65535))
 }
 
 func (w *Windows) Button(button byte, down bool) error {

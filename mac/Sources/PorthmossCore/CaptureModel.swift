@@ -17,18 +17,6 @@ public struct Rect: Equatable, Sendable {
 /// Which edge of the Mac's desktop leads to the Windows PC.
 public enum ScreenEdge: String, Sendable, CaseIterable {
     case left, right, top, bottom
-
-    /// The same boundary seen from the other machine. If the PC is beyond the
-    /// Mac's right edge, the Mac is beyond the PC's left one — so a single
-    /// setting on the Mac describes the layout for both.
-    public var mirrored: ScreenEdge {
-        switch self {
-        case .left: return .right
-        case .right: return .left
-        case .top: return .bottom
-        case .bottom: return .top
-        }
-    }
 }
 
 public struct CaptureConfig: Sendable, Equatable {

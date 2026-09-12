@@ -26,9 +26,6 @@ final class Session: @unchecked Sendable {
 
     private var clipboard: ClipboardBridge?
     private let incoming = FileTransfer.Receiver()
-    private let injector = MacInjector()
-    /// True while the PC is driving this Mac, rather than the other way round.
-    private(set) var isControlledByPC = false
     private var pingTimer: Timer?
     private var lastPongAt = Date()
     private var nextPingID: UInt64 = 1
@@ -81,10 +78,6 @@ final class Session: @unchecked Sendable {
         clipboard.start()
         self.clipboard = clipboard
 
-        connection.onInputFrame = { [weak self] type, body in
-            DispatchQueue.main.async { self?.applyRemoteInput(type, body) }
-        }
-
         connection.onFileFrame = { [weak self] type, body in
             DispatchQueue.main.async { self?.receiveFileFrame(type, body) }
         }
@@ -92,24 +85,11 @@ final class Session: @unchecked Sendable {
         // Every handler is installed; release anything the agent sent while we
         // were still setting up.
         connection.beginDelivery()
-        announceSelf()
 
         startHeartbeat()
         onEvent(.ready("Ready. Push the \(settings.capture.edge.rawValue) edge to take over the PC."))
     }
 
-    /// Tells the agent about this Mac: how big its desktop is, which edge of
-    /// the PC's desktop it lies beyond, and whether it accepts being driven.
-    func announceSelf() {
-        let desktop = Displays.union(Displays.all())
-        connection.post(.clientInfo, Wire.clientInfoBody(
-            desktop: desktop,
-            // The PC's edge is the mirror of this Mac's: one setting, here,
-            // describes the layout for both machines.
-            macBeyondEdge: settings.capture.edge.mirrored,
-            reverseControl: settings.allowPCControl
-        ))
-    }
 
     /// Takes new settings without tearing the link down.
     ///
@@ -125,19 +105,9 @@ final class Session: @unchecked Sendable {
         }
         settings = new
         model.config = new.capture
-        // The edge and the toggle both live in these settings, and the agent
-        // needs to hear about either changing.
-        announceSelf()
-
-        // Turning it off must take effect now, not at the next crossing.
-        if !new.allowPCControl {
-            releaseFromPC(reason: "this Mac no longer accepts control from the PC")
-        }
     }
 
     func stop() {
-        // Whatever the PC was holding down must not outlive the session.
-        releaseFromPC(reason: "the session ended")
         clipboard?.stop()
         clipboard = nil
         pingTimer?.invalidate()
@@ -168,23 +138,9 @@ final class Session: @unchecked Sendable {
             if self.model.isRemote {
                 self.panic("agent stopped responding")
             }
-            if self.isControlledByPC {
-                self.releaseFromPC(reason: "the PC stopped responding")
-            }
         }
     }
 
-    /// Hands control back to this Mac's own keyboard and mouse.
-    ///
-    /// Releases everything the PC was holding first. It also clears
-    /// `isControlledByPC`, which is what re-enables this Mac's edge detection:
-    /// without that the user could not push across to the PC again either.
-    private func releaseFromPC(reason: String) {
-        guard isControlledByPC else { return }
-        injector.releaseAll()
-        isControlledByPC = false
-        onEvent(.stoppedBeingDriven("Control returned to this Mac — \(reason)."))
-    }
 
     private func panic(_ reason: String) {
         if model.isRemote {
@@ -199,46 +155,6 @@ final class Session: @unchecked Sendable {
 
     /// Returns true when the event should be swallowed.
     private func handle(type: CGEventType, event: CGEvent) -> Bool {
-        // Our own injected events come back through the tap. Forwarding them
-        // would send the PC's input straight back to it, and pushing the
-        // injected cursor at the edge would start a crossing nobody asked for.
-        if event.getIntegerValueField(.eventSourceUserData) == MacInjector.injectedMarker {
-            return false
-        }
-        // While the PC has control, this Mac is a target: its own edge
-        // detection must stay out of the way, and its own pointer input is
-        // swallowed so there is one cursor rather than two fighting.
-        //
-        // Note what this does *not* do: the event is passed through, not
-        // swallowed, so the user's own trackpad still moves this Mac's cursor
-        // and fights the position the PC is injecting. That is deliberate, for
-        // two reasons. It keeps the two ends symmetric — the PC does not
-        // consume its local input while the Mac drives it either. And more
-        // importantly, swallowing would mean a PC that wedges mid-session
-        // locks the user out of their own laptop, with the escape hotkey
-        // living on the machine that has stopped responding. A cursor being
-        // fought over is a nuisance; a laptop that ignores its owner is not.
-        if isControlledByPC {
-            switch type {
-            case .keyDown, .keyUp, .flagsChanged:
-                // The keyboard deliberately still works. Two keyboards
-                // interleaving is survivable; a wedged PC leaving this Mac
-                // unable to type is not, and the escape below needs it.
-                if type == .keyDown, isPanicHotkey(
-                    keycode: UInt16(event.getIntegerValueField(.keyboardEventKeycode)),
-                    flags: event.flags
-                ) {
-                    releaseFromPC(reason: "released with the escape hotkey")
-                    return true
-                }
-                return false
-            default:
-                // Pointer input: swallowed. A pointer has one position, and
-                // two sources moving it means the hand moves it, the PC's next
-                // absolute position snaps it back, and the cursor teleports.
-                return true
-            }
-        }
         switch type {
         case .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged:
             return handleMotion(event, dragging: type == .leftMouseDragged)
@@ -365,42 +281,6 @@ final class Session: @unchecked Sendable {
         }
     }
 
-    /// Applies one input frame from the PC, which is driving this Mac.
-    private func applyRemoteInput(_ type: UInt8, _ body: [UInt8]) {
-        guard let message = Wire.MessageType(rawValue: type) else { return }
-        do {
-            switch message {
-            case .enter:
-                let move = try Wire.decodeMouseMove(body)
-                isControlledByPC = true
-                injector.refreshDisplays()
-                injector.enter(x: move.x, y: move.y)
-                onEvent(.startedBeingDriven)
-            case .leave:
-                releaseFromPC(reason: "it handed control back")
-            case .mouseMove:
-                let move = try Wire.decodeMouseMove(body)
-                injector.moveTo(x: move.x, y: move.y)
-            case .mouseButton:
-                let press = try Wire.decodeMouseButton(body)
-                if let button = Wire.MouseButton(rawValue: press.button) {
-                    injector.button(button, down: press.down)
-                }
-            case .mouseWheel:
-                let scroll = try Wire.decodeMouseWheel(body)
-                injector.wheel(dx: scroll.dx, dy: scroll.dy)
-            case .key:
-                let key = try Wire.decodeKey(body)
-                injector.key(scancode: key.scancode, down: key.down, extended: key.extended)
-            case .keyReset:
-                injector.releaseAll()
-            default:
-                break
-            }
-        } catch {
-            onEvent(.note("Input from the PC was malformed."))
-        }
-    }
 
     /// Applies one file-transfer frame from the PC.
     private func receiveFileFrame(_ type: UInt8, _ body: [UInt8]) {

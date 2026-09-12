@@ -40,11 +40,7 @@ struct MenuBarContent: View {
         case let .connecting(host): return "Connecting to \(host)…"
         case let .pairing(host): return "Pairing with \(host)…"
         case let .connected(host):
-            switch model.direction {
-            case .drivingPC: return "Controlling \(host)"
-            case .drivenByPC: return "\(host) is controlling this Mac"
-            case .none: return "Connected to \(host)"
-            }
+            return model.isControllingPC ? "Controlling \(host)" : "Connected to \(host)"
         case .failed: return "Disconnected"
         }
     }

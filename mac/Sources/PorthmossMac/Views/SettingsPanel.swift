@@ -56,20 +56,6 @@ struct SettingsPanel: View {
                         .toggleStyle(.switch)
                         .controlSize(.small)
 
-                        Toggle(isOn: $model.draft.allowPCControl) {
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text("Let the PC control this Mac").font(.system(size: 11))
-                                Text("Push the \(model.draft.capture.edge.mirrored.rawValue) "
-                                    + "edge of the PC's screen to come back here.")
-                                    .font(.system(size: 10))
-                                    .foregroundStyle(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
-
                         Toggle(isOn: $model.draft.invertScroll) {
                             Text("Invert scrolling on the PC")
                                 .font(.system(size: 11))

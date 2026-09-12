@@ -21,9 +21,6 @@ type State struct {
 	Paired bool   `json:"paired"`
 	// Controlled means a Mac is driving this PC right now.
 	Controlled bool `json:"controlled"`
-	// Capturing means the opposite: this PC's own mouse and keyboard are
-	// driving the Mac.
-	Capturing bool `json:"capturing"`
 	// LastFile is the most recent file dragged over from the Mac.
 	LastFile string `json:"lastFile"`
 	// DropDir is the folder those files land in.

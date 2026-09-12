@@ -17,13 +17,6 @@ struct Settings: Equatable {
     /// How much trackpad movement makes one Windows wheel notch.
     var pixelsPerNotch = 12.0
 
-    /// Whether the PC may drive this Mac by pushing its own screen edge.
-    ///
-    /// Configured here rather than on the PC because this is where the user
-    /// said which edge leads where; the PC's edge is simply the mirror of it,
-    /// and having to agree the layout separately on each machine is how you
-    /// end up pushing an edge that nothing listens to.
-    var allowPCControl = false
 
     /// Where configuration lives.
     ///
@@ -56,7 +49,6 @@ struct Settings: Equatable {
         settings.clientName = stored.clientName ?? settings.clientName
         settings.invertScroll = stored.invertScroll ?? settings.invertScroll
         settings.pixelsPerNotch = stored.pixelsPerNotch ?? settings.pixelsPerNotch
-        settings.allowPCControl = stored.allowPCControl ?? settings.allowPCControl
         if let edge = stored.edge.flatMap(ScreenEdge.init(rawValue:)) { settings.capture.edge = edge }
         if let value = stored.sensitivity { settings.capture.sensitivity = value }
         if let value = stored.pushThreshold { settings.capture.pushThreshold = value }
@@ -70,8 +62,7 @@ struct Settings: Equatable {
             edge: capture.edge.rawValue, sensitivity: capture.sensitivity,
             pushThreshold: capture.pushThreshold, invertScroll: invertScroll,
             pixelsPerNotch: pixelsPerNotch,
-            passthroughModifiers: modifiers.control.code == 0x1D,
-            allowPCControl: allowPCControl
+            passthroughModifiers: modifiers.control.code == 0x1D
         )
         let url = Settings.fileURL
         try FileManager.default.createDirectory(
@@ -92,6 +83,5 @@ struct Settings: Equatable {
         var invertScroll: Bool?
         var pixelsPerNotch: Double?
         var passthroughModifiers: Bool?
-        var allowPCControl: Bool?
     }
 }

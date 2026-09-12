@@ -14,10 +14,6 @@ enum SessionEvent {
     case startedDrivingPC
     /// This Mac stopped driving the PC, for the stated reason.
     case stoppedDrivingPC(String)
-    /// The PC began driving this Mac.
-    case startedBeingDriven
-    /// The PC stopped driving this Mac, for the stated reason.
-    case stoppedBeingDriven(String)
     /// The link is gone and the session is over.
     case connectionLost(String)
     /// Worth showing, but it changes no control state. Transfers, warnings,
@@ -30,19 +26,14 @@ enum SessionEvent {
         case let .ready(text): return text
         case .startedDrivingPC: return "Controlling the PC."
         case let .stoppedDrivingPC(reason): return reason
-        case .startedBeingDriven: return "The PC is controlling this Mac."
-        case let .stoppedBeingDriven(reason): return reason
         case let .connectionLost(reason): return "Connection lost: \(reason)"
         case let .note(text): return text
         }
     }
 }
 
-/// Which way input is flowing, if at all.
+/// Whether this Mac's keyboard and mouse are driving the PC.
 enum ControlDirection {
     case none
-    /// This Mac's keyboard and mouse are driving the PC.
     case drivingPC
-    /// The PC's keyboard and mouse are driving this Mac.
-    case drivenByPC
 }

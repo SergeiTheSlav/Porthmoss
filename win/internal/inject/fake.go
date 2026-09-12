@@ -15,6 +15,9 @@ type Fake struct {
 	Layout      proto.ScreenInfo
 	heldKeys    map[uint16]bool
 	heldButtons map[byte]bool
+
+	pointerX, pointerY float64
+	lastX, lastY       uint16
 }
 
 func NewFake() *Fake {
@@ -44,7 +47,53 @@ func (f *Fake) Drain() []string {
 	return out
 }
 
-func (f *Fake) MoveTo(x, y uint16) error { return f.record("move %d,%d", x, y) }
+// Pointer is where the fake believes the cursor is, in virtual-desktop pixels.
+// Tests move it directly to stand in for a hand on the PC's own mouse.
+func (f *Fake) Pointer() (x, y float64) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.pointerX, f.pointerY
+}
+
+// MoveLocally stands in for the user nudging the PC's own mouse.
+func (f *Fake) MoveLocally(dx, dy float64) {
+	f.mu.Lock()
+	f.pointerX += dx
+	f.pointerY += dy
+	f.mu.Unlock()
+}
+
+func (f *Fake) EnterAt(x, y uint16) error {
+	f.mu.Lock()
+	f.pointerX, f.pointerY = f.toPixels(x, y)
+	f.lastX, f.lastY = x, y
+	f.mu.Unlock()
+	return f.record("enter %d,%d", x, y)
+}
+
+func (f *Fake) MoveTo(x, y uint16) error {
+	f.mu.Lock()
+	dx, dy := f.deltaPixels(x, y)
+	f.lastX, f.lastY = x, y
+	f.pointerX += dx
+	f.pointerY += dy
+	f.mu.Unlock()
+	return f.record("move %d,%d", x, y)
+}
+
+// toPixels converts a normalised point to virtual-desktop pixels.
+func (f *Fake) toPixels(x, y uint16) (float64, float64) {
+	v := f.Layout.Virtual
+	return float64(v.Left) + float64(x)/65535*float64(v.Width-1),
+		float64(v.Top) + float64(y)/65535*float64(v.Height-1)
+}
+
+// deltaPixels is how far the Mac means to move, in pixels.
+func (f *Fake) deltaPixels(x, y uint16) (float64, float64) {
+	v := f.Layout.Virtual
+	return (float64(x) - float64(f.lastX)) / 65535 * float64(v.Width-1),
+		(float64(y) - float64(f.lastY)) / 65535 * float64(v.Height-1)
+}
 
 func (f *Fake) Button(button byte, down bool) error {
 	f.mu.Lock()

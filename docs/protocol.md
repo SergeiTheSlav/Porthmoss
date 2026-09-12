@@ -49,41 +49,12 @@ Any auth failure is answered with `0x05 ERROR` and the connection is closed.
 Coordinates are Windows virtual-desktop pixels. The Mac uses the virtual rect
 to convert its own cursor model into the normalised 0..65535 space below.
 
-There is no message the other way: the agent is never told how big the Mac's
-desktop is, and does not need to be, because positions travel normalised and
-the Mac maps them onto whatever it has. The agent only needs a plausible
-rectangle to run its own crossing model in, and assumes the Mac's desktop
-matches its own. Anything better would mean a new message and a change on the
-Mac; if one is ever added, append it rather than changing `READY`.
+There is no message the other way: the Mac never describes itself, because
+nothing on the PC needs to know. Control only flows one way.
 
-## CLIENT_INFO
+## Input messages (Mac -> Agent)
 
-    0x06 CLIENT_INFO
-        i32 left, top, width, height   the Mac's whole desktop, in Mac pixels
-        u8  flags                      bit0 = the Mac accepts being driven
-        u8  edge_len, edge             edge of the *PC's* desktop the Mac is beyond
-
-The mirror of `READY`, sent by the Mac straight after the handshake and again
-whenever its settings change.
-
-Reverse control is configured entirely from the Mac, because that is where the
-user said which edge leads where. The PC's edge is the mirror of it — if the PC
-is beyond the Mac's right edge, the Mac is beyond the PC's left — so one
-setting describes the layout for both machines. An agent that guesses instead
-fails silently: the crossing simply never fires, whichever edge is pushed.
-
-An agent that never receives this keeps reverse control **off**. A Mac that
-cannot be driven never sends it, and a user who has not turned it on has not
-asked for it.
-
-## Input messages (either direction)
-
-These are symmetric: the Mac sends them to drive the PC, and the agent sends
-exactly the same messages back to drive the Mac. Only one machine holds control
-at a time, so there is no ambiguity about who a given message is for — whoever
-receives `ENTER` is the target until `LEAVE`.
-
-All positions are **absolute**, normalised to the receiver's whole desktop:
+All positions are **absolute**, normalised to the PC's virtual desktop:
 `n = round(65535 * (px - virtual_left) / (virtual_width - 1))`.
 
 Absolute is deliberate: relative deltas get run through Windows' pointer
@@ -95,11 +66,16 @@ acceleration a second time and feel wrong. The Mac owns the cursor position.
     0x20 KEY           u16 scancode, u8 down, u8 flags (bit0 = extended)
     0x21 KEY_RESET     -                   (release every key the agent holds)
 
-Key events carry **PS/2 set-1 scancodes**, not virtual key codes, so neither
-end has to know the other's keyboard layout. Each end remaps modifiers as it
-sends or receives: the Mac turns Cmd into Ctrl on the way out, and turns the
-PC's Ctrl back into Cmd on the way in (`KeyMap.modifier(forScancode:extended:)`),
-so Cmd+C and Ctrl+C both copy on whichever machine you are looking at.
+Key events carry **PS/2 set-1 scancodes**, not virtual key codes, so the agent
+never has to know the Mac's keyboard layout. The Mac is responsible for
+Cmd->Ctrl and other modifier remapping before it gets here.
+
+`ENTER` places the pointer at exactly the position it carries. `MOUSE_MOVE`
+does **not**: the agent applies the *difference* since the previous message to
+wherever the pointer actually is. The PC's own mouse stays live throughout, and
+an absolute placement would undo whatever the user's hand just did — they nudge
+it, the next message snaps it back, and the cursor visibly teleports. Taking
+the difference means both mice move one cursor.
 
 ## Clipboard
 
