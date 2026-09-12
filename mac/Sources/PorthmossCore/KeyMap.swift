@@ -1,7 +1,7 @@
 import Foundation
 
 /// A Windows key, as a PS/2 set-1 scancode plus whether it needs the E0 prefix.
-public struct Scancode: Equatable, Sendable {
+public struct Scancode: Equatable, Hashable, Sendable {
     public let code: UInt16
     public let extended: Bool
 
@@ -98,6 +98,49 @@ public enum KeyMap {
     public static func scancode(forVirtualKey keycode: UInt16) -> Scancode? {
         table[keycode]
     }
+
+    /// Maps a Windows scancode back to a macOS virtual key code, for input
+    /// arriving from the PC.
+    ///
+    /// Built by inverting `table` rather than written out again: two hand-kept
+    /// tables of the same 100 keys drift, and the drift shows up as one key in
+    /// twenty doing nothing.
+    public static func virtualKey(forScancode code: UInt16, extended: Bool) -> UInt16? {
+        inverseTable[Scancode(code, extended: extended)]
+    }
+
+    /// Maps a Windows modifier scancode to the macOS modifier it should become.
+    ///
+    /// The mirror of `ModifierMapping`: the Mac sends ⌘ as Ctrl so shortcuts
+    /// survive, so input coming the other way turns the PC's Ctrl back into ⌘.
+    /// Anything else would mean ⌃C on the PC keyboard doing nothing useful on
+    /// the Mac.
+    public static func modifier(forScancode code: UInt16, extended: Bool) -> Modifier? {
+        switch (code, extended) {
+        case (0x1D, false): return .leftCommand
+        case (0x1D, true): return .rightCommand
+        case (0x5B, true): return .leftControl
+        case (0x5C, true): return .rightControl
+        case (0x38, false): return .leftOption
+        case (0x38, true): return .rightOption
+        case (0x2A, false): return .leftShift
+        case (0x36, false): return .rightShift
+        case (0x3A, false): return .capsLock
+        default: return nil
+        }
+    }
+
+    private static let inverseTable: [Scancode: UInt16] = {
+        var inverse: [Scancode: UInt16] = [:]
+        for (virtualKey, scancode) in table {
+            // The forward table is one-to-one apart from the numeric keypad,
+            // which shares scancodes with the navigation cluster; the
+            // navigation keys are the E0-prefixed ones, so the two do not
+            // actually collide once `extended` is part of the key.
+            inverse[scancode] = virtualKey
+        }
+        return inverse
+    }()
 
     private static let table: [UInt16: Scancode] = [
         // Letters

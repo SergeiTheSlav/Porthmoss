@@ -30,6 +30,8 @@ final class AgentConnection: @unchecked Sendable {
     var onDisconnect: @Sendable (String) -> Void = { _ in }
     /// Text the PC copied.
     var onClipboardText: @Sendable (String) -> Void = { _ in }
+    /// An input frame from the PC, when it is driving this Mac.
+    var onInputFrame: @Sendable (UInt8, [UInt8]) -> Void = { _, _ in }
     /// A file-transfer frame from the PC: type and body, applied in order.
     var onFileFrame: @Sendable (UInt8, [UInt8]) -> Void = { _, _ in }
 
@@ -299,6 +301,14 @@ final class AgentConnection: @unchecked Sendable {
                     if let id = try? Wire.decodeU64(frame.body) { self.pendingPong(id) }
                 case Wire.MessageType.clipboardText.rawValue:
                     self.onClipboardText(String(decoding: frame.body, as: UTF8.self))
+                case Wire.MessageType.mouseMove.rawValue,
+                     Wire.MessageType.mouseButton.rawValue,
+                     Wire.MessageType.mouseWheel.rawValue,
+                     Wire.MessageType.key.rawValue,
+                     Wire.MessageType.keyReset.rawValue,
+                     Wire.MessageType.enter.rawValue,
+                     Wire.MessageType.leave.rawValue:
+                    self.onInputFrame(frame.type, frame.body)
                 case Wire.MessageType.fileBegin.rawValue,
                      Wire.MessageType.fileChunk.rawValue,
                      Wire.MessageType.fileEnd.rawValue,

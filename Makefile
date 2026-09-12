@@ -51,6 +51,10 @@ test: test-go test-mac
 test-cursor:
 	mac/Scripts/cursor-drift-test.sh
 
+# Does input from the PC actually drive this Mac? Also moves the cursor.
+test-injector:
+	mac/Scripts/injector-test.sh
+
 # -unsafeptr is off for one documented case: the clipboard converts addresses
 # returned by Win32 into pointers. See internal/clipboard/clipboard_windows.go.
 test-go:

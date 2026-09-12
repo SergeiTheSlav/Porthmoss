@@ -203,6 +203,33 @@ public extension Wire {
         return out
     }
 
+    static func decodeMouseMove(_ body: [UInt8]) throws -> (x: UInt16, y: UInt16) {
+        guard body.count >= 4 else { throw WireError.truncated }
+        return (UInt16(body[0]) << 8 | UInt16(body[1]), UInt16(body[2]) << 8 | UInt16(body[3]))
+    }
+
+    static func decodeMouseButton(_ body: [UInt8]) throws -> (button: UInt8, down: Bool) {
+        guard body.count >= 2 else { throw WireError.truncated }
+        return (body[0], body[1] == 1)
+    }
+
+    static func decodeMouseWheel(_ body: [UInt8]) throws -> (dx: Int16, dy: Int16) {
+        guard body.count >= 4 else { throw WireError.truncated }
+        return (
+            Int16(bitPattern: UInt16(body[0]) << 8 | UInt16(body[1])),
+            Int16(bitPattern: UInt16(body[2]) << 8 | UInt16(body[3]))
+        )
+    }
+
+    static func decodeKey(_ body: [UInt8]) throws -> (scancode: UInt16, down: Bool, extended: Bool) {
+        guard body.count >= 4 else { throw WireError.truncated }
+        return (
+            UInt16(body[0]) << 8 | UInt16(body[1]),
+            body[2] == 1,
+            body[3] & keyFlagExtended != 0
+        )
+    }
+
     static func decodeU64(_ body: [UInt8]) throws -> UInt64 {
         guard body.count >= 8 else { throw WireError.truncated }
         return body.prefix(8).reduce(UInt64(0)) { $0 << 8 | UInt64($1) }

@@ -26,6 +26,9 @@ final class Session: @unchecked Sendable {
 
     private var clipboard: ClipboardBridge?
     private let incoming = FileTransfer.Receiver()
+    private let injector = MacInjector()
+    /// True while the PC is driving this Mac, rather than the other way round.
+    private(set) var isControlledByPC = false
     private var pingTimer: Timer?
     private var lastPongAt = Date()
     private var nextPingID: UInt64 = 1
@@ -78,6 +81,10 @@ final class Session: @unchecked Sendable {
         clipboard.start()
         self.clipboard = clipboard
 
+        connection.onInputFrame = { [weak self] type, body in
+            DispatchQueue.main.async { self?.applyRemoteInput(type, body) }
+        }
+
         connection.onFileFrame = { [weak self] type, body in
             DispatchQueue.main.async { self?.receiveFileFrame(type, body) }
         }
@@ -103,6 +110,11 @@ final class Session: @unchecked Sendable {
     }
 
     func stop() {
+        // Whatever the PC was holding down must not outlive the session.
+        if isControlledByPC {
+            injector.releaseAll()
+            isControlledByPC = false
+        }
         clipboard?.stop()
         clipboard = nil
         pingTimer?.invalidate()
@@ -144,6 +156,15 @@ final class Session: @unchecked Sendable {
 
     /// Returns true when the event should be swallowed.
     private func handle(type: CGEventType, event: CGEvent) -> Bool {
+        // Our own injected events come back through the tap. Forwarding them
+        // would send the PC's input straight back to it, and pushing the
+        // injected cursor at the edge would start a crossing nobody asked for.
+        if event.getIntegerValueField(.eventSourceUserData) == MacInjector.injectedMarker {
+            return false
+        }
+        // While the PC has control, this Mac is a target: its own edge
+        // detection must stay out of the way.
+        if isControlledByPC { return false }
         switch type {
         case .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged:
             return handleMotion(event, dragging: type == .leftMouseDragged)
@@ -267,6 +288,45 @@ final class Session: @unchecked Sendable {
                                ? "Sent \(urls[0].lastPathComponent) to the PC."
                                : "Sent \(urls.count) files to the PC.")
             }
+        }
+    }
+
+    /// Applies one input frame from the PC, which is driving this Mac.
+    private func applyRemoteInput(_ type: UInt8, _ body: [UInt8]) {
+        guard let message = Wire.MessageType(rawValue: type) else { return }
+        do {
+            switch message {
+            case .enter:
+                let move = try Wire.decodeMouseMove(body)
+                isControlledByPC = true
+                injector.refreshDisplays()
+                injector.enter(x: move.x, y: move.y)
+                onStatus("The PC is controlling this Mac.")
+            case .leave:
+                injector.releaseAll()
+                isControlledByPC = false
+                onStatus("The PC handed control back.")
+            case .mouseMove:
+                let move = try Wire.decodeMouseMove(body)
+                injector.moveTo(x: move.x, y: move.y)
+            case .mouseButton:
+                let press = try Wire.decodeMouseButton(body)
+                if let button = Wire.MouseButton(rawValue: press.button) {
+                    injector.button(button, down: press.down)
+                }
+            case .mouseWheel:
+                let scroll = try Wire.decodeMouseWheel(body)
+                injector.wheel(dx: scroll.dx, dy: scroll.dy)
+            case .key:
+                let key = try Wire.decodeKey(body)
+                injector.key(scancode: key.scancode, down: key.down, extended: key.extended)
+            case .keyReset:
+                injector.releaseAll()
+            default:
+                break
+            }
+        } catch {
+            onStatus("Input from the PC was malformed.")
         }
     }
 

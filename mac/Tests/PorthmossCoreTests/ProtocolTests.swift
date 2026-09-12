@@ -94,3 +94,49 @@ private extension Array where Element == UInt8 {
         appendBigEndian(UInt32(bitPattern: value))
     }
 }
+
+@Suite("Reverse key mapping")
+struct ReverseKeyMapTests {
+    @Test("Every mappable key survives a round trip")
+    func roundTrip() {
+        // The inverse table is derived from the forward one, so this is really
+        // a check that deriving it did not collapse two keys onto one.
+        var checked = 0
+        var broken: [String] = []
+        for keycode in UInt16(0) ... 0x7F {
+            guard let scancode = KeyMap.scancode(forVirtualKey: keycode) else { continue }
+            checked += 1
+            let back = KeyMap.virtualKey(forScancode: scancode.code, extended: scancode.extended)
+            if back != keycode {
+                broken.append("0x\(String(keycode, radix: 16)) -> 0x\(String(scancode.code, radix: 16))"
+                    + " -> 0x\(String(back ?? 0xFFFF, radix: 16))")
+            }
+        }
+        if !broken.isEmpty {
+            Issue.record("keys that did not survive the round trip: \(broken.joined(separator: ", "))")
+        }
+        #expect(checked > 80)
+    }
+
+    @Test("The PC's Ctrl becomes ⌘, so its shortcuts work on the Mac")
+    func controlBecomesCommand() {
+        // The mirror of ⌘ becoming Ctrl on the way out. Without it, Ctrl+C
+        // typed on the PC keyboard would do nothing useful on the Mac.
+        #expect(KeyMap.modifier(forScancode: 0x1D, extended: false) == .leftCommand)
+        #expect(KeyMap.modifier(forScancode: 0x1D, extended: true) == .rightCommand)
+        // And the Windows key takes Control's place.
+        #expect(KeyMap.modifier(forScancode: 0x5B, extended: true) == .leftControl)
+        #expect(KeyMap.modifier(forScancode: 0x38, extended: false) == .leftOption)
+        #expect(KeyMap.modifier(forScancode: 0x2A, extended: false) == .leftShift)
+    }
+
+    @Test("Arrows come back as arrows, not as the numeric keypad")
+    func extendedKeysAreDistinct() {
+        // Both share a scancode; only the E0 prefix separates them, so this is
+        // where an inverse table built carelessly loses half the keyboard.
+        #expect(KeyMap.virtualKey(forScancode: 0x4B, extended: true) == 0x7B)   // left arrow
+        #expect(KeyMap.virtualKey(forScancode: 0x4B, extended: false) == 0x56)  // keypad 4
+        #expect(KeyMap.virtualKey(forScancode: 0x48, extended: true) == 0x7E)   // up arrow
+        #expect(KeyMap.virtualKey(forScancode: 0x48, extended: false) == 0x5B)  // keypad 8
+    }
+}
