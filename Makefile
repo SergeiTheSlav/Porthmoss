@@ -4,7 +4,7 @@
 DIST := dist
 APP  := $(DIST)/Porthmoss.app
 
-.PHONY: all mac app run install uninstall agent agent-arm64 test test-go test-mac test-cursor dist clean
+.PHONY: all mac app dmg run install uninstall agent agent-arm64 test test-go test-mac test-cursor dist clean
 
 # The app is the deliverable on the Mac side, so a bare `make` produces
 # something double-clickable in Finder rather than a binary in .build.
@@ -21,6 +21,11 @@ run: app
 	open $(APP)
 
 # Put it where Finder and Spotlight expect to find it.
+# A disk image to hand to somebody else: universal, ad-hoc signed, and
+# carrying the Windows agent, without which the Mac app does nothing.
+dmg:
+	mac/Scripts/make-dmg.sh
+
 install: app
 	rm -rf /Applications/Porthmoss.app
 	cp -R $(APP) /Applications/

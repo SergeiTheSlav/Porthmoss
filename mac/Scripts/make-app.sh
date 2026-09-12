@@ -11,7 +11,10 @@ set -euo pipefail
 CONFIG="${1:-release}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO="$(cd "$ROOT/.." && pwd)"
-BINARY="$ROOT/.build/$CONFIG/PorthmossMac"
+# PORTHMOSS_BINARY lets the release script hand over a universal binary built
+# with `swift build --arch arm64 --arch x86_64`, which SwiftPM puts somewhere
+# else entirely.
+BINARY="${PORTHMOSS_BINARY:-$ROOT/.build/$CONFIG/PorthmossMac}"
 APP="${APP_OUT:-$REPO/dist/Porthmoss.app}"
 
 [ -x "$BINARY" ] || { echo "build first: (cd mac && swift build -c $CONFIG)" >&2; exit 1; }
@@ -58,6 +61,14 @@ PLIST
 # stable — its hash changes on every build, so each rebuild silently revoked
 # both grants while System Settings still showed the switches as on.
 KEYCHAIN="$HOME/Library/Keychains/porthmoss-signing.keychain-db"
+# A build for somebody else is signed ad-hoc. The local identity is a
+# certificate that exists only in this keychain, so on another Mac it names an
+# authority the system has never heard of — worse than no authority at all.
+if [ "${PORTHMOSS_SIGN:-local}" = "adhoc" ]; then
+    codesign --force --sign - --timestamp=none "$APP"
+    echo "Built $APP (ad-hoc signed, for distribution)"
+    exit 0
+fi
 if IDENTITY="$("$ROOT/Scripts/signing-identity.sh" 2>/dev/null)" && [ -n "$IDENTITY" ]; then
     codesign --force --sign "$IDENTITY" --keychain "$KEYCHAIN" --timestamp=none "$APP"
 else
