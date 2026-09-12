@@ -213,6 +213,12 @@ func run() error {
 				"enabled", info.ReverseControl(), "mac_beyond_edge", info.Edge)
 		},
 
+		OnRemoteInput: func() {
+			if capturer != nil {
+				capturer.NoteDriven()
+			}
+		},
+
 		OnRemoteControl: func(active bool) {
 			if capturer != nil {
 				capturer.Suspend(active)

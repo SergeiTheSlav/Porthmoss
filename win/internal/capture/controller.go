@@ -71,6 +71,11 @@ type Options struct {
 	OnStatus func(Status)
 }
 
+// drivenGrace is how long this PC keeps its own pointer swallowed after the
+// last message from the Mac. Long enough to cover an idle moment mid-session,
+// short enough that anything going wrong restores the mouse almost at once.
+const drivenGrace = 2 * time.Second
+
 const (
 	// queueDepth is how many messages may be waiting on the socket before the
 	// hook starts dropping them. Movement is a few bytes and the link is a
@@ -126,6 +131,16 @@ type Controller struct {
 	model     *Model
 	send      Sender
 	suspended bool
+	// drivenUntil bounds how long this PC's own pointer stays swallowed.
+	//
+	// Swallowing is right while the Mac is actually driving — one pointer, one
+	// source — but it must not be able to outlive the thing that justifies it.
+	// If the Mac stops sending without saying LEAVE, an unbounded suspension
+	// leaves this PC with a mouse that does nothing at all, which is a far
+	// worse failure than the teleport it was introduced to prevent. Each
+	// message from the Mac extends this; silence expires it.
+	drivenUntil time.Time
+
 	// enabled is the Mac's say-so. Reverse control is configured from there,
 	// and stays off until the Mac asks for it — an older Mac that cannot be
 	// driven never asks, and a user who has not turned it on has not asked
@@ -242,6 +257,11 @@ func (c *Controller) Suspend(suspended bool) {
 	}
 	c.suspended = suspended
 	c.hasLast = false
+	if suspended {
+		c.drivenUntil = time.Now().Add(drivenGrace)
+	} else {
+		c.drivenUntil = time.Time{}
+	}
 	c.mu.Unlock()
 	if suspended {
 		c.ForceRelease("the Mac took control of this PC")
@@ -327,7 +347,7 @@ func (c *Controller) Close() {
 // virtual-desktop pixels.
 func (c *Controller) MouseMoved(position Point) bool {
 	c.mu.Lock()
-	if c.suspended {
+	if c.beingDrivenLocked() {
 		// The Mac is driving this PC, so its injected positions are the only
 		// thing that should move the pointer. Passing the user's own mouse
 		// through as well gives two sources for one pointer: the hand moves
@@ -423,11 +443,11 @@ func (c *Controller) nudgeTargetLocked(position Point) (Point, bool) {
 // has control; otherwise they belong to whatever is on this PC.
 func (c *Controller) MouseButton(button byte, down bool) bool {
 	c.mu.Lock()
-	if c.suspended {
-		c.mu.Unlock()
+	driven := c.beingDrivenLocked()
+	c.mu.Unlock()
+	if driven {
 		return true
 	}
-	c.mu.Unlock()
 
 	if !c.remote() {
 		return false
@@ -439,11 +459,11 @@ func (c *Controller) MouseButton(button byte, down bool) bool {
 // MouseWheel forwards a scroll, in whole wheel notches.
 func (c *Controller) MouseWheel(dx, dy int16) bool {
 	c.mu.Lock()
-	if c.suspended {
-		c.mu.Unlock()
+	driven := c.beingDrivenLocked()
+	c.mu.Unlock()
+	if driven {
 		return true
 	}
-	c.mu.Unlock()
 
 	if !c.remote() {
 		return false
@@ -504,6 +524,30 @@ func (c *Controller) ForceRelease(reason string) {
 
 // active reports whether there is a Mac to send to and nothing else is already
 // driving this PC. Callers must hold the mutex.
+// expireDrivenForTest pretends the Mac has gone quiet, so the grace period can
+// be tested without waiting it out.
+func (c *Controller) expireDrivenForTest() {
+	c.mu.Lock()
+	c.drivenUntil = time.Now().Add(-time.Second)
+	c.mu.Unlock()
+}
+
+// NoteDriven records that input has just arrived from the Mac, keeping this
+// PC's own pointer swallowed for a little longer.
+func (c *Controller) NoteDriven() {
+	c.mu.Lock()
+	if c.suspended {
+		c.drivenUntil = time.Now().Add(drivenGrace)
+	}
+	c.mu.Unlock()
+}
+
+// beingDrivenLocked reports whether the Mac is driving this PC *right now*,
+// rather than merely having said so at some point.
+func (c *Controller) beingDrivenLocked() bool {
+	return c.suspended && time.Now().Before(c.drivenUntil)
+}
+
 func (c *Controller) active() bool {
 	return c.send != nil && c.enabled && !c.suspended
 }

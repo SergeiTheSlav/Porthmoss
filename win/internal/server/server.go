@@ -70,6 +70,11 @@ type Server struct {
 	// so this is where the capture path learns what to do.
 	OnClientInfo func(proto.ClientInfo)
 
+	// OnRemoteInput is called for every input message from the Mac, so the
+	// capture path can tell "the Mac is driving" from "the Mac said it was
+	// driving some time ago and has since gone quiet".
+	OnRemoteInput func()
+
 	// OnRemoteControl reports the Mac taking and releasing control of this PC.
 	// The capture path uses it to stay out of the way — two machines both
 	// trying to own one pointer would fight over it.
@@ -380,6 +385,19 @@ func (s *Server) dispatch(
 	incoming *transfer.Receiver,
 	frame proto.Frame,
 ) error {
+	// Noting arrival keeps the capture path's suspension alive. Without it,
+	// "the Mac is driving this PC" and "the Mac said so once and has since
+	// gone quiet" look identical, and this PC's own mouse stays swallowed for
+	// the second one — a mouse that does nothing being a far worse failure
+	// than the teleport that swallowing exists to prevent.
+	switch frame.Type {
+	case proto.TypeMouseMove, proto.TypeMouseButton, proto.TypeMouseWheel,
+		proto.TypeKey, proto.TypeKeyReset, proto.TypeEnter:
+		if s.OnRemoteInput != nil {
+			s.OnRemoteInput()
+		}
+	}
+
 	switch frame.Type {
 	case proto.TypeMouseMove:
 		m, err := proto.DecodeMouseMove(frame.Body)

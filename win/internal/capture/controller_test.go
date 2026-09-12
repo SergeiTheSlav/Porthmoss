@@ -518,3 +518,36 @@ func TestCaptureStaysOffUntilTheMacAsks(t *testing.T) {
 		t.Fatal("SetEnabled(true) did not take")
 	}
 }
+
+// TestSwallowingExpiresIfTheMacGoesQuiet is the safety net under the
+// one-cursor behaviour.
+//
+// Swallowing this PC's pointer is right while the Mac is actually driving it,
+// but it must never outlive the thing that justifies it. A Mac that stops
+// sending without saying LEAVE would otherwise leave this PC with a mouse that
+// does nothing at all — a far worse failure than the teleport that swallowing
+// was introduced to prevent.
+func TestSwallowingExpiresIfTheMacGoesQuiet(t *testing.T) {
+	c, _, _ := newRig(t)
+	c.Suspend(true)
+
+	if !c.MouseMoved(Point{X: 900, Y: 400}) {
+		t.Fatal("the PC's pointer should be swallowed while the Mac drives it")
+	}
+
+	// The Mac stops sending, and never says LEAVE.
+	c.expireDrivenForTest()
+
+	if c.MouseMoved(Point{X: 901, Y: 401}) {
+		t.Error("the PC's mouse is still dead after the Mac went quiet")
+	}
+	if c.MouseButton(proto.ButtonLeft, true) {
+		t.Error("clicks are still swallowed after the Mac went quiet")
+	}
+
+	// And a message from the Mac puts it back under the Mac's control.
+	c.NoteDriven()
+	if !c.MouseMoved(Point{X: 902, Y: 402}) {
+		t.Error("input from the Mac should resume swallowing")
+	}
+}
