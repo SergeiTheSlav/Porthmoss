@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"runtime"
 	"sync"
+	"syscall"
 	"unsafe"
 
 	"github.com/energye/systray"
@@ -26,6 +27,9 @@ var (
 	dwmapi = windows.NewLazySystemDLL("dwmapi.dll")
 
 	procShowWindow          = user32.NewProc("ShowWindow")
+	procSetWindowLongPtr    = user32.NewProc("SetWindowLongPtrW")
+	procCallWindowProc      = user32.NewProc("CallWindowProcW")
+	procDefWindowProc       = user32.NewProc("DefWindowProcW")
 	procSetForegroundWindow = user32.NewProc("SetForegroundWindow")
 	procDwmSetWindowAttrib  = dwmapi.NewProc("DwmSetWindowAttribute")
 )
@@ -33,6 +37,11 @@ var (
 const (
 	swHide = 0
 	swShow = 5
+
+	wmClose = 0x0010
+	// GWLP_WNDPROC, which is -4. Only the 64-bit form is needed: this agent
+	// ships for amd64 and arm64 and nothing else.
+	gwlpWndProc = ^uintptr(3)
 
 	// Windows 11 window trimmings. Both are no-ops on Windows 10, which is
 	// why they are fire-and-forget rather than checked.
@@ -51,12 +60,13 @@ const (
 type WindowsUI struct {
 	opts Options
 
-	mu      sync.Mutex
-	view    webview2.WebView
-	hwnd    uintptr
-	last    State
-	loaded  bool
-	stopped bool
+	mu          sync.Mutex
+	view        webview2.WebView
+	hwnd        uintptr
+	last        State
+	loaded      bool
+	stopped     bool
+	lastTooltip string
 
 	ready chan struct{}
 }
@@ -127,6 +137,7 @@ func (w *WindowsUI) runWebView() {
 
 	hwnd := uintptr(view.Window())
 	applyWindowChrome(hwnd)
+	hideOnClose(hwnd)
 
 	// The page calls these; they are the entire UI-to-agent surface.
 	_ = view.Bind("unpair", func() {
@@ -162,6 +173,41 @@ func (w *WindowsUI) runWebView() {
 	close(w.ready)
 
 	view.Run()
+
+	// Run returns once the window is destroyed, and the deferred Destroy above
+	// then releases the WebView2 objects. Anything still holding this pointer
+	// would be calling into freed COM the next time the state changed — a
+	// session connecting, a file arriving — so it must not outlive the loop.
+	w.mu.Lock()
+	w.view = nil
+	w.hwnd = 0
+	w.mu.Unlock()
+}
+
+// hideOnClose makes the window's close button hide it rather than destroy it.
+//
+// This is a tray application: closing the window should put it away, not tear
+// down the interface for the rest of the session. Destroying it also ended the
+// message loop, after which every state update dispatched into released COM
+// objects and took the process with it — which is why the agent kept dying
+// shortly after the window was "minimised".
+func hideOnClose(hwnd uintptr) {
+	var previous uintptr
+	proc := syscall.NewCallback(func(hwnd, msg, wParam, lParam uintptr) uintptr {
+		if msg == wmClose {
+			procShowWindow.Call(hwnd, swHide)
+			return 0
+		}
+		if previous == 0 {
+			// A message arriving before SetWindowLongPtrW has returned. Rare,
+			// but the alternative is calling through a null pointer.
+			ret, _, _ := procDefWindowProc.Call(hwnd, msg, wParam, lParam)
+			return ret
+		}
+		ret, _, _ := procCallWindowProc.Call(previous, hwnd, msg, wParam, lParam)
+		return ret
+	})
+	previous, _, _ = procSetWindowLongPtr.Call(hwnd, gwlpWndProc, proc)
 }
 
 // applyWindowChrome asks for the Windows 11 look. Both attributes are silently
@@ -179,9 +225,9 @@ func applyWindowChrome(hwnd uintptr) {
 func (w *WindowsUI) Show() {
 	<-w.ready
 	w.mu.Lock()
-	hwnd, view := w.hwnd, w.view
+	hwnd, view, stopped := w.hwnd, w.view, w.stopped
 	w.mu.Unlock()
-	if view == nil || hwnd == 0 {
+	if view == nil || hwnd == 0 || stopped {
 		return
 	}
 	view.Dispatch(func() {
@@ -192,9 +238,9 @@ func (w *WindowsUI) Show() {
 
 func (w *WindowsUI) Hide() {
 	w.mu.Lock()
-	hwnd, view := w.hwnd, w.view
+	hwnd, view, stopped := w.hwnd, w.view, w.stopped
 	w.mu.Unlock()
-	if view == nil || hwnd == 0 {
+	if view == nil || hwnd == 0 || stopped {
 		return
 	}
 	view.Dispatch(func() { procShowWindow.Call(hwnd, swHide) })
@@ -202,20 +248,34 @@ func (w *WindowsUI) Hide() {
 
 func (w *WindowsUI) Update(state State) {
 	w.mu.Lock()
+	previous := w.last
 	w.last = state
 	loaded := w.loaded
+	tip := tooltip(state)
+	changedTip := tip != w.lastTooltip
+	if changedTip {
+		w.lastTooltip = tip
+	}
 	w.mu.Unlock()
 
-	systray.SetTooltip(tooltip(state))
+	// Only when the text actually changes. Update runs on whichever goroutine
+	// happened to change the state — the server's, a file arriving — and every
+	// call here is a cross-thread Shell_NotifyIcon. Doing it on every state
+	// change meant doing it for reasons that never altered a single character.
+	if changedTip {
+		systray.SetTooltip(tip)
+	}
 	if loaded {
 		w.push(state)
 	}
 	switch {
-	case state.Code != "":
+	case state.Code != "" && state.Code != previous.Code:
 		// An unpaired Mac is waiting on a code nobody can see if the window is
-		// hidden, so this is the one state that opens it unprompted.
+		// hidden, so this is the one state that opens it unprompted. Only when
+		// the code is new: repeating it would pile up goroutines all fighting
+		// to front the same window.
 		go w.Show()
-	case state.Controlled:
+	case state.Controlled && !previous.Controlled:
 		// SendInput delivers keystrokes to whatever window is in front. If
 		// that is this one, every key the Mac sends lands in a status page
 		// with nowhere to put it — the mouse still works, because it is
@@ -226,9 +286,9 @@ func (w *WindowsUI) Update(state State) {
 
 func (w *WindowsUI) push(state State) {
 	w.mu.Lock()
-	view := w.view
+	view, stopped := w.view, w.stopped
 	w.mu.Unlock()
-	if view == nil {
+	if view == nil || stopped {
 		return
 	}
 	encoded, err := json.Marshal(state)
