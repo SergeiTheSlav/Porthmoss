@@ -92,7 +92,7 @@ enum CLI {
                 print("porthmoss: --unpair needs --host to say which agent to forget")
                 exit(2)
             }
-            Keychain.forget(agent: settings.agentHost)
+            PairingStore.forget(agent: settings.agentHost)
             print("Forgot the pairing with \(settings.agentHost). Run the agent with --unpair too.")
             exit(0)
         }
@@ -144,7 +144,7 @@ enum CLI {
 
         // MARK: - Connect
 
-        let stored = Keychain.load(agent: settings.agentHost)
+        let stored = PairingStore.load(agent: settings.agentHost)
         let connection = AgentConnection(
             host: settings.agentHost,
             port: settings.agentPort,
@@ -181,7 +181,7 @@ enum CLI {
 
                     case let .success((screens, secret, fingerprint)):
                         do {
-                            try Keychain.save(agent: agentHost, secret: secret, fingerprint: fingerprint)
+                            try PairingStore.save(agent: agentHost, secret: secret, fingerprint: fingerprint)
                         } catch {
                             print("warning: could not store the pairing — \(error.localizedDescription)")
                         }

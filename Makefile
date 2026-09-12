@@ -35,6 +35,12 @@ dist: agent agent-arm64
 
 test: test-go test-mac
 
+# End-to-end: does the Mac cursor stay put while the PC is being driven?
+# Needs a window server and moves the cursor for a second, so it is not part
+# of `make test`.
+test-cursor:
+	mac/Scripts/cursor-drift-test.sh
+
 test-go:
 	cd win && go test ./... && go vet ./... && GOOS=windows GOARCH=amd64 go vet ./...
 

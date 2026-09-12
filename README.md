@@ -87,9 +87,16 @@ with a message that says so plainly rather than a generic TLS error. Pairing
 also establishes a 32-byte shared secret derived from a 6-digit code the agent
 displays, salted with that certificate fingerprint, so the same code typed at a
 different machine derives a different secret and cannot be replayed. The secret
-lives in the macOS Keychain, `WhenUnlockedThisDeviceOnly`, never synced. Failed
-pairing attempts rotate the code after five tries. Only one Mac may control an
-agent at a time.
+lives in a 0600 file, alongside the agent's own. Failed pairing attempts rotate
+the code after five tries. Only one Mac may control an agent at a time.
+
+The pairing deliberately does **not** live in the macOS Keychain. A keychain
+item's ACL is bound to the code identity that created it, and an ad-hoc
+signature changes on every rebuild — so macOS treats each build as a new app
+and asks for the login password before handing the secret back. Being prompted
+for your password to reach a PC on your own LAN is absurd. The trade is that
+anything already running as you can read the file, which buys that attacker
+nothing: a process running as you can synthesise the input directly.
 
 ## Building
 
@@ -151,9 +158,22 @@ macOS re-asks until this is signed with a real Developer ID.
 ## Running the tests
 
 ```bash
-make test-go     # agent: protocol, pairing, dead-man switch, single controller
-make test-mac    # Mac: wire codec, key mapping, edge crossing
+make test-go      # agent: protocol, pairing, dead-man switch, single controller
+make test-mac     # Mac: wire codec, key mapping, edge crossing
+make test-cursor  # end-to-end: does the Mac cursor stay put while driving the PC?
 ```
+
+`make test-cursor` pairs a real agent and a real client over loopback, crosses
+over, and checks the Mac cursor does not follow the mouse. It needs a window
+server and moves the cursor for about a second, so it is not part of
+`make test`. It exists because swallowing an event in a CGEventTap does **not**
+hold the cursor still — the tap controls what applications receive, while the
+window server moves the pointer from the HID stream regardless — and nothing
+short of an end-to-end run catches that. The crossing model looks perfectly
+correct the whole time it is happening.
+
+`PORTHMOSS_TRACE=1` makes the Mac side print every motion decision, which is
+how that was pinned down.
 
 `make test-mac` needs the full Xcode toolchain — swift-testing's macros are not
 included in the Command Line Tools. If `xcode-select -p` still points at

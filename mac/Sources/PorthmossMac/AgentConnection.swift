@@ -179,7 +179,8 @@ final class AgentConnection: @unchecked Sendable {
                     } else {
                         guard let stored = storedSecret else {
                             return completion(.failure(WireError.rejected(
-                                "this Mac is not paired with that agent — run it with --unpair to start over")))
+                                "This Mac has no pairing for that PC. On the PC, choose "
+                                    + "\"Forget paired Mac\" from the Porthmoss tray icon, then connect again.")))
                         }
                         secret = stored
                     }

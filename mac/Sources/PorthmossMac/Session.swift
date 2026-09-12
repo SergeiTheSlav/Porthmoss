@@ -65,7 +65,7 @@ final class Session: @unchecked Sendable {
 
     func stop() {
         pingTimer?.invalidate()
-        if model.isRemote { _ = releaseControl(model.forceReturn()) }
+        if model.isRemote { releaseControl(model.forceReturn(), announce: false) }
         tap?.stop()
         connection.stop()
     }
@@ -92,7 +92,7 @@ final class Session: @unchecked Sendable {
 
     private func panic(_ reason: String) {
         if model.isRemote {
-            _ = releaseControl(model.forceReturn())
+            releaseControl(model.forceReturn(), announce: false)
             onStatus("Control returned to the Mac — \(reason).")
         } else {
             onStatus("\(reason.prefix(1).uppercased())\(reason.dropFirst()).")
@@ -125,6 +125,12 @@ final class Session: @unchecked Sendable {
         }
     }
 
+    /// Set PORTHMOSS_TRACE=1 to print every motion decision. The crossing
+    /// rules are timing- and delta-dependent, so guessing at them from the
+    /// outside does not work.
+    private static let trace = ProcessInfo.processInfo.environment["PORTHMOSS_TRACE"] == "1"
+    private var traced = 0
+
     private func handleMotion(_ event: CGEvent) -> Bool {
         let delta = Point(
             x: Double(event.getIntegerValueField(.mouseEventDeltaX)),
@@ -142,15 +148,24 @@ final class Session: @unchecked Sendable {
         }
 
         let action = model.mouseMoved(cursor: cursor, delta: delta, now: Date().timeIntervalSinceReferenceDate)
+        if Session.trace, traced < 80 {
+            traced += 1
+            print(String(format: "  trace %02d remote=%@ cursor=(%.0f,%.0f) delta=(%.0f,%.0f) -> %@",
+                         traced, model.isRemote ? "Y" : "n",
+                         cursor.x, cursor.y, delta.x, delta.y, "\(action)"))
+        }
         switch action {
         case .none:
             return false
         case let .enterRemote(x, y):
-            CursorControl.capture()
+            CursorControl.capture(parkingAt: cursor)
             connection.post(.enter, Wire.mouseMoveBody(x: x, y: y))
             onStatus("Controlling the PC.")
             return true
         case let .moveRemote(x, y):
+            // Undo whatever the window server did with this movement before
+            // anyone can see it: swallowing the event does not hold the cursor.
+            CursorControl.pin()
             connection.post(.mouseMove, Wire.mouseMoveBody(x: x, y: y))
             return true
         case .returnToLocal:
@@ -158,11 +173,14 @@ final class Session: @unchecked Sendable {
         }
     }
 
-    private func releaseControl(_ action: CaptureAction?) -> Bool {
+    /// `announce` is false when the caller reports the release itself, so a
+    /// dropped connection does not produce two messages about the same event.
+    @discardableResult
+    private func releaseControl(_ action: CaptureAction?, announce: Bool = true) -> Bool {
         guard case let .returnToLocal(point)? = action else { return false }
         connection.post(.leave)
         CursorControl.release(to: point)
-        onStatus("Back on the Mac.")
+        if announce { onStatus("Back on the Mac.") }
         return true
     }
 

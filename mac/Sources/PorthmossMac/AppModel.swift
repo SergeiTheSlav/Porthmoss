@@ -128,7 +128,7 @@ final class AppModel: ObservableObject {
         state = .connecting(host)
         statusLine = "Connecting to \(host)…"
 
-        let stored = Keychain.load(agent: host)
+        let stored = PairingStore.load(agent: host)
         let connection = AgentConnection(
             host: host, port: settings.agentPort, pinnedFingerprint: stored?.fingerprint
         )
@@ -168,7 +168,7 @@ final class AppModel: ObservableObject {
 
         case let .success((screens, secret, fingerprint)):
             do {
-                try Keychain.save(agent: host, secret: secret, fingerprint: fingerprint)
+                try PairingStore.save(agent: host, secret: secret, fingerprint: fingerprint)
             } catch {
                 statusLine = "Connected, but the pairing could not be saved."
             }
@@ -221,7 +221,7 @@ final class AppModel: ObservableObject {
         let host = settings.agentHost
         guard !host.isEmpty else { return }
         teardown()
-        Keychain.forget(agent: host)
+        PairingStore.forget(agent: host)
         state = .idle
         statusLine = "Forgot the pairing with \(host). Run the agent's Unpair too, then reconnect."
     }
