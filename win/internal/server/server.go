@@ -200,7 +200,7 @@ func (s *Server) handshake(conn net.Conn) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	expected, pairingNow, err := s.expectedSecret()
+	expected, pairingNow, err := s.expectedSecret(hello.NeedsPairing())
 	if err != nil {
 		return "", err
 	}
@@ -241,11 +241,20 @@ func (s *Server) handshake(conn net.Conn) (string, error) {
 	return hello.Name, nil
 }
 
-// expectedSecret returns the secret the peer must prove, and whether this is a
-// first-time pairing (in which case the secret comes from the displayed code).
-func (s *Server) expectedSecret() (secret []byte, pairingNow bool, err error) {
-	if s.Identity.Paired() {
+// expectedSecret returns the secret the peer must prove, and whether a pairing
+// code is in play (in which case the secret is derived from the displayed code).
+//
+// macRequestsPairing covers a Mac that has lost its half of the pairing — a
+// reinstall, or restored-from-backup. Honouring it means anyone on the network
+// can make a code appear on the PC, which is a nuisance and nothing more: the
+// code still has to be read off that screen, and the existing pairing is only
+// replaced once a new one actually completes.
+func (s *Server) expectedSecret(macRequestsPairing bool) (secret []byte, pairingNow bool, err error) {
+	if s.Identity.Paired() && !macRequestsPairing {
 		return s.Identity.Secret(), false, nil
+	}
+	if macRequestsPairing && s.Identity.Paired() {
+		s.Log.Info("a Mac with no stored pairing asked to pair again; showing a code")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()

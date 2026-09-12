@@ -123,17 +123,24 @@ func DecodeScreenInfo(b []byte) (ScreenInfo, error) {
 	return s, nil
 }
 
+// HelloFlagNeedsPairing says the Mac holds no secret for this agent and is
+// asking to pair again. An agent that is already paired would otherwise just
+// reject it, leaving no way back except physically unpairing at the PC.
+const HelloFlagNeedsPairing = 1 << 0
+
 // Hello is the client's opening message.
 type Hello struct {
 	Version uint16
 	Name    string
+	Flags   byte
 }
 
 func (h Hello) Encode() []byte {
-	out := make([]byte, 4+len(h.Name))
+	out := make([]byte, 5+len(h.Name))
 	binary.BigEndian.PutUint16(out[0:], h.Version)
 	binary.BigEndian.PutUint16(out[2:], uint16(len(h.Name)))
 	copy(out[4:], h.Name)
+	out[4+len(h.Name)] = h.Flags
 	return out
 }
 
@@ -145,8 +152,17 @@ func DecodeHello(b []byte) (Hello, error) {
 	if len(b) < 4+n {
 		return Hello{}, io.ErrUnexpectedEOF
 	}
-	return Hello{Version: binary.BigEndian.Uint16(b), Name: string(b[4 : 4+n])}, nil
+	hello := Hello{Version: binary.BigEndian.Uint16(b), Name: string(b[4 : 4+n])}
+	// The flag byte was added after the first release; a HELLO without it is
+	// simply a Mac that is not asking to re-pair.
+	if len(b) > 4+n {
+		hello.Flags = b[4+n]
+	}
+	return hello, nil
 }
+
+// NeedsPairing reports whether this Mac is asking for a fresh pairing code.
+func (h Hello) NeedsPairing() bool { return h.Flags&HelloFlagNeedsPairing != 0 }
 
 func appendI32(dst []byte, vals ...int32) []byte {
 	for _, v := range vals {

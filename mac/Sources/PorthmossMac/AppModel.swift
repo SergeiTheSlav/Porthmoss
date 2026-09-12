@@ -62,6 +62,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var statusLine = ""
     @Published private(set) var screens: RemoteScreens?
     @Published private(set) var discovered: [Discovery.Agent] = []
+    @Published private(set) var saved: [PairingStore.SavedPC] = []
     @Published private(set) var isControllingPC = false
     /// Non-nil while a pairing sheet should be on screen.
     @Published var pairingRequest: PairingRequest?
@@ -70,7 +71,17 @@ final class AppModel: ObservableObject {
         didSet { try? settings.save() }
     }
 
-    init(settings: Settings) { self.settings = settings }
+    init(settings: Settings) {
+        self.settings = settings
+        saved = PairingStore.saved()
+    }
+
+    /// Discovered PCs this Mac has never paired with. One that is already
+    /// saved belongs in the saved list, not offered again as something new.
+    var unpaired: [Discovery.Agent] {
+        let known = Set(saved.map(\.host))
+        return discovered.filter { !known.contains($0.host) }
+    }
 
     private var connection: AgentConnection?
     private var session: Session?
@@ -113,6 +124,26 @@ final class AppModel: ObservableObject {
     func select(_ agent: Discovery.Agent) {
         settings.agentHost = agent.host
         settings.agentPort = agent.port
+    }
+
+    func select(_ pc: PairingStore.SavedPC) {
+        settings.agentHost = pc.host
+        settings.agentPort = pc.port
+    }
+
+    func forget(_ pc: PairingStore.SavedPC) {
+        if settings.agentHost == pc.host { teardown() }
+        PairingStore.forget(agent: pc.host)
+        saved = PairingStore.saved()
+        state = .idle
+        statusLine = "Forgot \(pc.displayName). Pair again to reconnect."
+    }
+
+    /// Connects to one specific PC rather than to whatever settings holds.
+    func connect(to host: String, port: UInt16) {
+        settings.agentHost = host
+        settings.agentPort = port
+        connect()
     }
 
     // MARK: - Connection
@@ -173,7 +204,15 @@ final class AppModel: ObservableObject {
 
         case let .success((screens, secret, fingerprint)):
             do {
-                try PairingStore.save(agent: host, secret: secret, fingerprint: fingerprint)
+                try PairingStore.save(
+                    agent: host,
+                    port: settings.agentPort,
+                    name: discovered.first { $0.host == host }?.name
+                        ?? saved.first { $0.host == host }?.name ?? "",
+                    secret: secret,
+                    fingerprint: fingerprint
+                )
+                saved = PairingStore.saved()
             } catch {
                 statusLine = "Connected, but the pairing could not be saved."
             }
@@ -233,6 +272,7 @@ final class AppModel: ObservableObject {
         guard !host.isEmpty else { return }
         teardown()
         PairingStore.forget(agent: host)
+        saved = PairingStore.saved()
         state = .idle
         statusLine = "Forgot the pairing with \(host). Run the agent's Unpair too, then reconnect."
     }

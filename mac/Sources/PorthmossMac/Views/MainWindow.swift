@@ -7,19 +7,22 @@ struct MainWindow: View {
     var body: some View {
         VStack(spacing: Metrics.gap) {
             StatusPanel()
-            PCPanel()
+            if !model.saved.isEmpty { SavedPanel() }
+            AddPCPanel()
             if model.isConnected { CrossingPanel() }
             SettingsPanel()
             Logotype()
         }
         .padding(Metrics.gap)
         .task {
-            // A PC we already know: connect to it. This is a background utility
-            // — opening it and then having to press Connect every time is a
-            // step that never had a reason to exist.
-            if !model.settings.agentHost.isEmpty {
-                model.connect()
-            } else if model.discovered.isEmpty {
+            // Reconnect to the PC most recently paired with, and otherwise go
+            // looking. Opening the app and then having to press Connect every
+            // time is a step that never had a reason to exist — and keying off
+            // the saved list rather than settings means it never tries a PC
+            // this Mac can no longer authenticate to.
+            if let recent = model.saved.first {
+                model.connect(to: recent.host, port: recent.port)
+            } else {
                 model.search()
             }
         }
@@ -143,9 +146,86 @@ private struct StatusPanel: View {
     }
 }
 
-// MARK: - Which PC
+// MARK: - Saved PCs
 
-private struct PCPanel: View {
+/// PCs this Mac has already paired with. One click reconnects; there is no
+/// code to type and nothing to discover, which is the whole point of having
+/// paired in the first place.
+private struct SavedPanel: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        Panel {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Your PCs")
+                    .font(.system(size: 12, weight: .semibold))
+
+                VStack(spacing: 4) {
+                    ForEach(model.saved) { pc in
+                        SavedRow(pc: pc)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct SavedRow: View {
+    @EnvironmentObject private var model: AppModel
+    let pc: PairingStore.SavedPC
+    @State private var hovering = false
+
+    private var isCurrent: Bool { model.settings.agentHost == pc.host }
+    private var isLive: Bool { isCurrent && model.isConnected }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(isLive ? Color.green : Color.secondary.opacity(0.35))
+                .frame(width: 7, height: 7)
+
+            VStack(alignment: .leading, spacing: 0) {
+                Text(pc.displayName).font(.system(size: 11, weight: .medium))
+                Text(pc.host)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 8)
+
+            if isLive {
+                Button("Disconnect") { model.disconnect() }
+                    .glassButtonStyle()
+                    .controlSize(.small)
+            } else {
+                Button("Connect") { model.connect(to: pc.host, port: pc.port) }
+                    .glassButtonStyle(prominent: true)
+                    .controlSize(.small)
+                    .disabled(model.state.isBusy)
+            }
+
+            IconButton(systemName: "trash", help: "Forget \(pc.displayName)") {
+                model.forget(pc)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .glassSurfaceEffect(
+            in: RoundedRectangle(cornerRadius: Metrics.rowRadius, style: .continuous),
+            enabled: isCurrent || hovering,
+            tint: isLive ? Color.green.opacity(0.12)
+                : (isCurrent ? Color.accentColor.opacity(0.12) : .white.opacity(0.06))
+        )
+        .onHover { hovering = $0 }
+    }
+}
+
+// MARK: - Adding a PC
+
+/// Pairing with something new. Kept apart from the saved list because it is a
+/// different job: this one needs the PC in front of you and a code off its
+/// screen, and it happens once per machine.
+private struct AddPCPanel: View {
     @EnvironmentObject private var model: AppModel
     @State private var manualHost = ""
 
@@ -153,27 +233,53 @@ private struct PCPanel: View {
         Panel {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text("Windows PC")
+                    Text(model.saved.isEmpty ? "Connect to a PC" : "Add another PC")
                         .font(.system(size: 12, weight: .semibold))
                     Spacer()
+                    if model.state == .searching {
+                        ProgressView().controlSize(.small)
+                    }
                     IconButton(systemName: "arrow.clockwise", help: "Search the network") {
                         model.search()
                     }
                     .disabled(model.state.isBusy)
                 }
 
-                if !model.discovered.isEmpty {
+                if model.unpaired.isEmpty {
+                    Text(model.state == .searching
+                         ? "Looking for PCs running Porthmoss…"
+                         : "No new PCs found. Start Porthmoss on the PC, or type its address.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
                     VStack(spacing: 4) {
-                        ForEach(model.discovered, id: \.host) { agent in
-                            AgentRow(agent: agent, selected: agent.host == model.settings.agentHost) {
-                                model.select(agent)
+                        ForEach(model.unpaired, id: \.host) { agent in
+                            HStack(spacing: 8) {
+                                VStack(alignment: .leading, spacing: 0) {
+                                    Text(agent.name).font(.system(size: 11, weight: .medium))
+                                    Text("\(agent.host):\(agent.port)")
+                                        .font(.system(size: 10, design: .monospaced))
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer(minLength: 8)
+                                Button("Pair") { model.connect(to: agent.host, port: agent.port) }
+                                    .glassButtonStyle(prominent: true)
+                                    .controlSize(.small)
+                                    .disabled(model.state.isBusy)
                             }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 6)
+                            .glassSurfaceEffect(
+                                in: RoundedRectangle(cornerRadius: Metrics.rowRadius, style: .continuous),
+                                tint: .white.opacity(0.05)
+                            )
                         }
                     }
                 }
 
                 HStack(spacing: 6) {
-                    TextField("Address, e.g. 192.168.0.7", text: $manualHost)
+                    TextField("Or type an address, e.g. 192.168.0.7", text: $manualHost)
                         .textFieldStyle(.plain)
                         .font(.system(size: 11, design: .monospaced))
                         .padding(.horizontal, 8)
@@ -181,70 +287,20 @@ private struct PCPanel: View {
                         .glassSurfaceEffect(
                             in: RoundedRectangle(cornerRadius: Metrics.rowRadius, style: .continuous)
                         )
-                        .onSubmit(useManualHost)
-                    Button("Use", action: useManualHost)
+                        .onSubmit(pairManually)
+                    Button("Pair", action: pairManually)
                         .glassButtonStyle()
-                        .disabled(manualHost.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-
-                HStack(spacing: 8) {
-                    if model.isConnected {
-                        Button("Disconnect") { model.disconnect() }
-                            .glassButtonStyle()
-                    } else {
-                        Button("Connect") { model.connect() }
-                            .glassButtonStyle(prominent: true)
-                            .disabled(model.state.isBusy || model.settings.agentHost.isEmpty)
-                    }
-                    Spacer()
-                    Button("Unpair") { model.unpair() }
-                        .glassButtonStyle()
-                        .disabled(model.settings.agentHost.isEmpty)
-                        .help("Forget the stored pairing with this PC")
+                        .disabled(manualHost.trimmingCharacters(in: .whitespaces).isEmpty
+                                  || model.state.isBusy)
                 }
             }
         }
-        .onAppear { manualHost = model.settings.agentHost }
     }
 
-    private func useManualHost() {
+    private func pairManually() {
         let host = manualHost.trimmingCharacters(in: .whitespaces)
         guard !host.isEmpty else { return }
-        model.settings.agentHost = host
-    }
-}
-
-private struct AgentRow: View {
-    let agent: Discovery.Agent
-    let selected: Bool
-    let action: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                Image(systemName: selected ? "largecircle.fill.circle" : "circle")
-                    .font(.system(size: 11))
-                    .foregroundStyle(selected ? Color.accentColor : .secondary)
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(agent.name).font(.system(size: 11, weight: .medium))
-                    Text("\(agent.host):\(agent.port)")
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .glassSurfaceEffect(
-                in: RoundedRectangle(cornerRadius: Metrics.rowRadius, style: .continuous),
-                enabled: selected || hovering,
-                tint: selected ? Color.accentColor.opacity(0.14) : .white.opacity(0.06)
-            )
-            .contentShape(RoundedRectangle(cornerRadius: Metrics.rowRadius, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
+        model.connect(to: host, port: model.settings.agentPort)
     }
 }
 

@@ -181,7 +181,10 @@ enum CLI {
 
                     case let .success((screens, secret, fingerprint)):
                         do {
-                            try PairingStore.save(agent: agentHost, secret: secret, fingerprint: fingerprint)
+                            try PairingStore.save(
+                            agent: agentHost, port: sessionSettings.agentPort,
+                            name: "", secret: secret, fingerprint: fingerprint
+                        )
                         } catch {
                             print("warning: could not store the pairing — \(error.localizedDescription)")
                         }

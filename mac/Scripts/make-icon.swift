@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import ImageIO
+import AppKit
 import UniformTypeIdentifiers
 
 // The app icon: a river.
@@ -137,6 +138,42 @@ func drawIcon(size: Double) -> CGImage? {
     return ctx.makeImage()
 }
 
+/// Wraps PNGs in an ICO container, so Windows gets the same artwork from the
+/// same drawing rather than a second, drifting copy of it. PNG-in-ICO has been
+/// supported since Windows Vista.
+func writeICO(_ images: [(size: Int, png: Data)], to path: String) {
+    var header = Data()
+    header.append(contentsOf: [0, 0, 1, 0])                       // reserved, type 1 (icon)
+    header.append(contentsOf: withUnsafeBytes(of: UInt16(images.count).littleEndian, Array.init))
+
+    var directory = Data()
+    var payload = Data()
+    var offset = 6 + images.count * 16
+
+    for image in images {
+        // 256 is encoded as 0 in the directory; the field is a single byte.
+        let dimension = UInt8(image.size == 256 ? 0 : image.size)
+        directory.append(contentsOf: [dimension, dimension, 0, 0])
+        directory.append(contentsOf: withUnsafeBytes(of: UInt16(1).littleEndian, Array.init))
+        directory.append(contentsOf: withUnsafeBytes(of: UInt16(32).littleEndian, Array.init))
+        directory.append(contentsOf: withUnsafeBytes(of: UInt32(image.png.count).littleEndian, Array.init))
+        directory.append(contentsOf: withUnsafeBytes(of: UInt32(offset).littleEndian, Array.init))
+        offset += image.png.count
+        payload.append(image.png)
+    }
+    try? (header + directory + payload).write(to: URL(fileURLWithPath: path))
+}
+
+func pngData(_ image: CGImage) -> Data? {
+    let data = NSMutableData()
+    guard let dest = CGImageDestinationCreateWithData(
+        data, UTType.png.identifier as CFString, 1, nil
+    ) else { return nil }
+    CGImageDestinationAddImage(dest, image, nil)
+    guard CGImageDestinationFinalize(dest) else { return nil }
+    return data as Data
+}
+
 func write(_ image: CGImage, to path: String) {
     guard let dest = CGImageDestinationCreateWithURL(
         URL(fileURLWithPath: path) as CFURL, UTType.png.identifier as CFString, 1, nil
@@ -161,3 +198,16 @@ for variant in variants {
     write(image, to: "\(outputDirectory)/\(variant.name).png")
 }
 print("wrote \(variants.count) icon sizes to \(outputDirectory)")
+
+// The Windows agent uses the same drawing for its tray icon, its window and
+// the file icon Explorer shows.
+if CommandLine.arguments.count > 2 {
+    let icoPath = CommandLine.arguments[2]
+    var entries: [(size: Int, png: Data)] = []
+    for dimension in [16, 24, 32, 48, 64, 128, 256] {
+        guard let image = drawIcon(size: Double(dimension)), let png = pngData(image) else { continue }
+        entries.append((dimension, png))
+    }
+    writeICO(entries, to: icoPath)
+    print("wrote \(entries.count)-size ICO to \(icoPath)")
+}

@@ -110,18 +110,16 @@ final class AgentConnection: @unchecked Sendable {
             }
         }
         guard fingerprintBox.rejectedPin else { return error }
-        let presented = fingerprintBox.value.map(hex) ?? "unknown"
+        // Short on purpose: this is rendered in a small panel, and two 64-digit
+        // fingerprints inline crowded out the sentence that actually tells the
+        // user what to do.
         return WireError.rejected("""
-        the PC at this address presented a different certificate than the one \
-        this Mac paired with.
+        \(host) is not the PC this Mac paired with — it presented a different \
+        identity.
 
-          expected: \(pinnedFingerprint.map(hex) ?? "none")
-          received: \(presented)
-
-        That happens if the agent's state was reset — or if something else is \
-        answering on that address. If you reset the agent yourself, run \
-        `porthmoss --host <addr> --unpair` and pair again. If you did not, do \
-        not pair: nothing on that address should be trusted with your keyboard.
+        If you reset Porthmoss on that PC, forget it here and pair again. If \
+        you did not, do not pair: something else may be answering on that \
+        address, and it should not be trusted with your keyboard.
         """)
     }
 
@@ -171,7 +169,9 @@ final class AgentConnection: @unchecked Sendable {
         completion: @escaping @Sendable (Result<(RemoteScreens, Data, Data), Error>) -> Void
     ) {
         do {
-            try sendFrame(.hello, Wire.helloBody(name: clientName))
+            try sendFrame(.hello, Wire.helloBody(
+                name: clientName, needsPairing: storedSecret == nil
+            ))
         } catch {
             return completion(.failure(error))
         }

@@ -23,6 +23,14 @@ type testRig struct {
 	fake     *inject.Fake
 	identity *pairing.Identity
 	codes    chan string
+	srv      *Server
+}
+
+// busy reports whether a controller still holds the agent's single slot.
+func (r *testRig) busy() bool {
+	r.srv.mu.Lock()
+	defer r.srv.mu.Unlock()
+	return r.srv.busy
 }
 
 func newRig(t *testing.T) *testRig {
@@ -31,7 +39,7 @@ func newRig(t *testing.T) *testRig {
 	if err != nil {
 		t.Fatalf("pairing.Load: %v", err)
 	}
-	rig := &testRig{fake: inject.NewFake(), identity: identity, codes: make(chan string, 1)}
+	rig := &testRig{fake: inject.NewFake(), identity: identity, codes: make(chan string, 4)}
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -47,6 +55,7 @@ func newRig(t *testing.T) *testRig {
 		Log:           slog.New(slog.DiscardHandler),
 		OnPairingCode: func(code string) { rig.codes <- code },
 	}
+	rig.srv = srv
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	go srv.Serve(ctx)
@@ -79,6 +88,13 @@ type client struct {
 }
 
 func dial(t *testing.T, rig *testRig, code string) (*client, error) {
+	return dialWithPairingRequest(t, rig, code, false)
+}
+
+// requestPairing sets the HELLO flag meaning "this Mac holds no secret for
+// you". The agent's answer, read out of the CHALLENGE below, is a separate
+// thing and the two must not be conflated.
+func dialWithPairingRequest(t *testing.T, rig *testRig, code string, requestPairing bool) (*client, error) {
 	t.Helper()
 	var gotFingerprint [32]byte
 	conn, err := tls.Dial("tcp", rig.addr, &tls.Config{
@@ -94,8 +110,11 @@ func dial(t *testing.T, rig *testRig, code string) (*client, error) {
 	t.Cleanup(func() { conn.Close() })
 	c := &client{conn: conn, buf: make([]byte, proto.MaxFrame)}
 
-	if err := proto.WriteFrame(conn, proto.TypeHello,
-		proto.Hello{Version: proto.Version, Name: "test-mac"}.Encode()); err != nil {
+	hello := proto.Hello{Version: proto.Version, Name: "test-mac"}
+	if requestPairing {
+		hello.Flags |= proto.HelloFlagNeedsPairing
+	}
+	if err := proto.WriteFrame(conn, proto.TypeHello, hello.Encode()); err != nil {
 		return nil, err
 	}
 	frame, err := proto.ReadFrame(conn, c.buf)
@@ -288,4 +307,64 @@ func TestSessionOutlivesHandshakeTimeout(t *testing.T) {
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
+}
+
+// TestMacThatLostItsPairingCanPairAgain covers a Mac whose stored secret is
+// gone — reinstalled, restored from backup, or migrated between stores — while
+// the agent still believes it is paired. Without this the only way back is to
+// unpair physically at the PC, which is a dead end if the PC is not to hand.
+func TestMacThatLostItsPairingCanPairAgain(t *testing.T) {
+	rig := newRig(t)
+	if _, err := dial(t, rig, "000000"); err == nil {
+		t.Fatal("expected failure before pairing")
+	}
+	firstCode := <-rig.codes
+
+	paired, err := dial(t, rig, firstCode)
+	if err != nil {
+		t.Fatalf("initial pairing: %v", err)
+	}
+	oldSecret := slices.Clone(rig.identity.Secret())
+	// The agent takes one controller at a time, so this has to go before
+	// anything else can be let in.
+	paired.conn.Close()
+	waitForFreeSlot(t, rig)
+
+	// A Mac that admits it holds no secret is offered a fresh code, and a wrong
+	// guess at that code still gets nowhere.
+	if _, err := dialWithPairingRequest(t, rig, "000000", true); err == nil {
+		t.Fatal("a guessed pairing code must not be accepted")
+	}
+	newCode := <-rig.codes
+	if newCode == firstCode {
+		t.Error("re-pairing should mint a new code, not reuse the old one")
+	}
+	if got := rig.identity.Secret(); !slices.Equal(got, oldSecret) {
+		t.Error("the existing pairing must survive until a new one completes")
+	}
+	waitForFreeSlot(t, rig)
+
+	if _, err := dialWithPairingRequest(t, rig, newCode, true); err != nil {
+		t.Fatalf("re-pairing with the displayed code: %v", err)
+	}
+	if slices.Equal(rig.identity.Secret(), oldSecret) {
+		t.Error("a completed re-pair should have replaced the secret")
+	}
+}
+
+// waitForFreeSlot blocks until the agent has finished tearing down the last
+// session, since it refuses a second controller while one is still attached.
+func waitForFreeSlot(t *testing.T, rig *testRig) {
+	t.Helper()
+	for range 50 {
+		conn, err := net.DialTimeout("tcp", rig.addr, 200*time.Millisecond)
+		if err == nil {
+			conn.Close()
+		}
+		time.Sleep(20 * time.Millisecond)
+		if !rig.busy() {
+			return
+		}
+	}
+	t.Fatal("the agent never released its controller slot")
 }

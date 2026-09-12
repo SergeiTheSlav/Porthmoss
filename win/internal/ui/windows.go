@@ -110,8 +110,11 @@ func (w *WindowsUI) runWebView() {
 		WindowOptions: webview2.WindowOptions{
 			Title:  "Porthmoss",
 			Width:  460,
-			Height: 620,
+			Height: 640,
 			Center: true,
+			// The RT_GROUP_ICON that rsrc embeds from the same drawing the Mac
+			// app uses. Without it the window shows the generic Windows icon.
+			IconId: 1,
 		},
 	})
 	if view == nil {

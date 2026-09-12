@@ -19,6 +19,18 @@ enum PairingStore {
         var fingerprint: Data
     }
 
+    /// A PC this Mac has paired with before, as the UI lists it.
+    struct SavedPC: Identifiable, Equatable {
+        var host: String
+        var port: UInt16
+        var name: String
+        var pairedAt: Date?
+
+        var id: String { host }
+        /// Falls back to the address when the agent never told us a name.
+        var displayName: String { name.isEmpty ? host : name }
+    }
+
     static var fileURL: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return base.appendingPathComponent("Porthmoss/pairings.json")
@@ -32,13 +44,35 @@ enum PairingStore {
         return Pairing(secret: secret, fingerprint: fingerprint)
     }
 
-    static func save(agent: String, secret: Data, fingerprint: Data) throws {
+    static func save(
+        agent: String, port: UInt16, name: String, secret: Data, fingerprint: Data
+    ) throws {
         guard secret.count == 32, fingerprint.count == 32 else {
             throw PairingStoreError.malformed
         }
         var entries = all()
-        entries[agent] = Entry(secret: secret.hexString, fingerprint: fingerprint.hexString)
+        entries[agent] = Entry(
+            secret: secret.hexString,
+            fingerprint: fingerprint.hexString,
+            name: name,
+            port: port,
+            pairedAt: ISO8601DateFormatter().string(from: Date())
+        )
         try write(entries)
+    }
+
+    /// Every PC this Mac has paired with, most recently paired first.
+    static func saved() -> [SavedPC] {
+        let parser = ISO8601DateFormatter()
+        return all().map { host, entry in
+            SavedPC(
+                host: host,
+                port: entry.port ?? 47654,
+                name: entry.name ?? "",
+                pairedAt: entry.pairedAt.flatMap(parser.date(from:))
+            )
+        }
+        .sorted { ($0.pairedAt ?? .distantPast) > ($1.pairedAt ?? .distantPast) }
     }
 
     static func forget(agent: String) {
@@ -52,6 +86,11 @@ enum PairingStore {
     private struct Entry: Codable {
         var secret: String
         var fingerprint: String
+        // Added after the first version, so all of these are optional: an
+        // older file must still load rather than dropping the pairing.
+        var name: String?
+        var port: UInt16?
+        var pairedAt: String?
     }
 
     private static func all() -> [String: Entry] {

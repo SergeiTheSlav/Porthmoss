@@ -125,6 +125,20 @@ button.accent { background: var(--accent); border-color: transparent; color: #ff
 button:disabled { opacity: 0.4; }
 
 .hidden { display: none !important; }
+
+/* The wordmark, set the way the Mac app sets it: quiet, letterspaced, and
+   half-transparent so it reads as a mark rather than as another control. */
+.wordmark {
+  text-align: center;
+  font-family: "Sitka Text", Georgia, "Times New Roman", serif;
+  font-size: 17px;
+  font-weight: 300;
+  letter-spacing: 0.26em;
+  text-indent: 0.26em;
+  color: var(--text);
+  opacity: 0.35;
+  padding: 4px 0 10px;
+}
 .footnote { color: var(--text-tertiary); font-size: 12px; margin-top: 10px; }
 </style>
 
@@ -165,6 +179,8 @@ button:disabled { opacity: 0.4; }
     apps; Windows blocks it on UAC prompts and the lock screen.
   </div>
 </div>
+
+<div class="wordmark">πορθμόςς</div>
 
 <script>
 function render(s) {

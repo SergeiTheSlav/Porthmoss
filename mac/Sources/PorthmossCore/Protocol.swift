@@ -95,12 +95,18 @@ public extension Wire {
 // MARK: - Message bodies
 
 public extension Wire {
-    static func helloBody(name: String) -> [UInt8] {
+    /// Set when this Mac holds no secret for the agent and is asking to pair
+    /// again. Without it, a Mac that has lost its half of the pairing is stuck:
+    /// the agent rejects it and the only way back is unpairing at the PC.
+    static let helloFlagNeedsPairing: UInt8 = 1 << 0
+
+    static func helloBody(name: String, needsPairing: Bool = false) -> [UInt8] {
         let nameBytes = Array(name.utf8.prefix(maxFrame - 8))
         var out: [UInt8] = []
         out.appendBigEndian(version)
         out.appendBigEndian(UInt16(nameBytes.count))
         out.append(contentsOf: nameBytes)
+        out.append(needsPairing ? helloFlagNeedsPairing : 0)
         return out
     }
 
