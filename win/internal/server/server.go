@@ -319,6 +319,10 @@ func (s *Server) dispatch(conn net.Conn, frame proto.Frame) error {
 		if err != nil {
 			return err
 		}
+		// Logged at debug because "the keyboard stopped working" is otherwise
+		// impossible to tell apart from "the Mac stopped sending keys".
+		s.Log.Debug("key", "scancode", fmt.Sprintf("0x%02x", k.Scancode),
+			"down", k.Down, "extended", k.Extended())
 		return s.Injector.Key(k.Scancode, k.Down, k.Extended())
 
 	case proto.TypeKeyReset, proto.TypeLeave:

@@ -176,8 +176,14 @@ final class Session: @unchecked Sendable {
     /// `announce` is false when the caller reports the release itself, so a
     /// dropped connection does not produce two messages about the same event.
     @discardableResult
-    private func releaseControl(_ action: CaptureAction?, announce: Bool = true) -> Bool {
+    private func releaseControl(
+        _ action: CaptureAction?, announce: Bool = true,
+        origin: String = #function, line: Int = #line
+    ) -> Bool {
         guard case let .returnToLocal(point)? = action else { return false }
+        if Session.trace {
+            print("  trace RELEASE from \(origin):\(line)")
+        }
         connection.post(.leave)
         CursorControl.release(to: point)
         if announce { onStatus("Back on the Mac.") }
@@ -238,10 +244,15 @@ final class Session: @unchecked Sendable {
             panic("released with the escape hotkey")
             return true
         }
-        guard model.isRemote else { return false }
-        guard let scancode = KeyMap.scancode(forVirtualKey: keycode) else {
-            return true // no Windows equivalent: swallow rather than leak to the Mac
+        guard model.isRemote else {
+            if Session.trace { print("  trace KEY 0x\(String(keycode, radix: 16)) down=\(down) DROPPED (not remote)") }
+            return false
         }
+        guard let scancode = KeyMap.scancode(forVirtualKey: keycode) else {
+            if Session.trace { print("  trace KEY 0x\(String(keycode, radix: 16)) has no Windows equivalent") }
+            return true // swallow rather than leak to the Mac
+        }
+        if Session.trace { print("  trace KEY 0x\(String(keycode, radix: 16)) down=\(down) -> scancode 0x\(String(scancode.code, radix: 16))") }
         connection.post(.key, Wire.keyBody(
             scancode: scancode.code, down: down, extended: scancode.extended
         ))
@@ -256,6 +267,7 @@ final class Session: @unchecked Sendable {
         // flagsChanged carries no up/down, so read it off the resulting flags.
         let down = event.flags.contains(flag(for: modifier))
         let scancode = KeyMap.scancode(for: modifier, mapping: settings.modifiers)
+        if Session.trace { print("  trace MOD \(modifier) down=\(down) -> scancode 0x\(String(scancode.code, radix: 16))") }
         connection.post(.key, Wire.keyBody(
             scancode: scancode.code, down: down, extended: scancode.extended
         ))

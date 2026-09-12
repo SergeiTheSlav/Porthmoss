@@ -95,6 +95,9 @@ func run() error {
 		front = ui.NewConsole()
 	} else {
 		front = ui.New(ui.Options{
+			// Nothing to say yet: sit in the tray rather than in front of
+			// whatever the user is doing.
+			StartHidden: identity.Paired(),
 			OnUnpair: func() {
 				if err := identity.Unpair(); err != nil {
 					log.Error("unpair failed", "err", err)
@@ -192,6 +195,7 @@ func (p *presenter) publish() {
 	}
 	switch {
 	case p.connected:
+		state.Controlled = true
 		state.Title = "Controlled by " + p.peer
 		state.Detail = "Your Mac is driving this PC."
 		state.Tone = "ok"

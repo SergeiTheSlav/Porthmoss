@@ -19,6 +19,8 @@ type State struct {
 	// Code is the pairing code, shown only while an unpaired Mac is waiting.
 	Code   string `json:"code"`
 	Paired bool   `json:"paired"`
+	// Controlled means a Mac is driving this PC right now.
+	Controlled bool `json:"controlled"`
 }
 
 // UI is the agent's front end. The console implementation is the fallback and
@@ -35,6 +37,10 @@ type UI interface {
 
 // Options configures a UI.
 type Options struct {
+	// StartHidden keeps the window out of the way on launch, for an agent that
+	// is already paired and has nothing to tell the user.
+	StartHidden bool
+
 	// OnUnpair is invoked when the user asks to forget the paired Mac.
 	OnUnpair func()
 	// OnQuit is invoked when the user quits from the tray.

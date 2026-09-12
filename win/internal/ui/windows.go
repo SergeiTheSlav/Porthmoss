@@ -146,6 +146,10 @@ func (w *WindowsUI) runWebView() {
 
 	view.SetHtml(indexHTML)
 
+	if w.opts.StartHidden {
+		procShowWindow.Call(hwnd, swHide)
+	}
+
 	w.mu.Lock()
 	w.view = view
 	w.hwnd = hwnd
@@ -201,10 +205,17 @@ func (w *WindowsUI) Update(state State) {
 	if loaded {
 		w.push(state)
 	}
-	// An unpaired Mac is waiting on a code nobody can see if the window is
-	// hidden, so this is the one state that opens it unprompted.
-	if state.Code != "" {
+	switch {
+	case state.Code != "":
+		// An unpaired Mac is waiting on a code nobody can see if the window is
+		// hidden, so this is the one state that opens it unprompted.
 		go w.Show()
+	case state.Controlled:
+		// SendInput delivers keystrokes to whatever window is in front. If
+		// that is this one, every key the Mac sends lands in a status page
+		// with nowhere to put it — the mouse still works, because it is
+		// positioned absolutely, and the keyboard silently does nothing.
+		go w.Hide()
 	}
 }
 
