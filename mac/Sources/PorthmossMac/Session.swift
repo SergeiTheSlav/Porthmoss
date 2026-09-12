@@ -89,6 +89,10 @@ final class Session: @unchecked Sendable {
             DispatchQueue.main.async { self?.receiveFileFrame(type, body) }
         }
 
+        // Every handler is installed; release anything the agent sent while we
+        // were still setting up.
+        connection.beginDelivery()
+
         startHeartbeat()
         onEvent(.ready("Ready. Push the \(settings.capture.edge.rawValue) edge to take over the PC."))
     }

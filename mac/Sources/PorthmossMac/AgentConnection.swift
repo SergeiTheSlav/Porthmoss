@@ -19,6 +19,20 @@ final class AgentConnection: @unchecked Sendable {
     private var inbound = Data()
     private var pendingPong: @Sendable (UInt64) -> Void = { _ in }
 
+    /// Frames that arrived before the session was wired up.
+    ///
+    /// The agent can send its first message immediately after the handshake —
+    /// the probe sends ENTER about a millisecond later — while the Mac only
+    /// installs its handlers once Session.start() runs. Without this those
+    /// frames land on a default no-op and vanish, and losing ENTER in
+    /// particular means the Mac is being driven without knowing it: its own
+    /// edge detection stays live and it never releases.
+    private var buffered: [(type: UInt8, body: [UInt8])] = []
+    private var deliveringToSession = false
+    /// Enough to cover the gap; a peer that floods before we are ready is not
+    /// something to absorb indefinitely.
+    private static let maxBuffered = 256
+
     /// The fingerprint the server actually presented, captured during the TLS
     /// handshake so pairing can salt with it.
     private var presentedFingerprint: Data?
@@ -296,34 +310,58 @@ final class AgentConnection: @unchecked Sendable {
             case let .failure(error):
                 self.onDisconnect(error.localizedDescription)
             case let .success(frame):
-                switch frame.type {
-                case Wire.MessageType.pong.rawValue:
+                // PONG drives the dead-man switch and must never be delayed.
+                if frame.type == Wire.MessageType.pong.rawValue {
                     if let id = try? Wire.decodeU64(frame.body) { self.pendingPong(id) }
-                case Wire.MessageType.clipboardText.rawValue:
-                    self.onClipboardText(String(decoding: frame.body, as: UTF8.self))
-                case Wire.MessageType.mouseMove.rawValue,
-                     Wire.MessageType.mouseButton.rawValue,
-                     Wire.MessageType.mouseWheel.rawValue,
-                     Wire.MessageType.key.rawValue,
-                     Wire.MessageType.keyReset.rawValue,
-                     Wire.MessageType.enter.rawValue,
-                     Wire.MessageType.leave.rawValue:
-                    self.onInputFrame(frame.type, frame.body)
-                case Wire.MessageType.fileBegin.rawValue,
-                     Wire.MessageType.fileChunk.rawValue,
-                     Wire.MessageType.fileEnd.rawValue,
-                     Wire.MessageType.fileAbort.rawValue:
-                    self.onFileFrame(frame.type, frame.body)
-                default:
-                    break
+                } else if self.deliveringToSession {
+                    self.deliver(frame.type, frame.body)
+                } else if self.buffered.count < AgentConnection.maxBuffered {
+                    self.buffered.append((frame.type, frame.body))
                 }
                 self.pump()
             }
         }
     }
 
+    /// Hands one frame to whichever part of the session owns it.
+    private func deliver(_ type: UInt8, _ body: [UInt8]) {
+        switch type {
+        case Wire.MessageType.clipboardText.rawValue:
+            onClipboardText(String(decoding: body, as: UTF8.self))
+        case Wire.MessageType.mouseMove.rawValue,
+             Wire.MessageType.mouseButton.rawValue,
+             Wire.MessageType.mouseWheel.rawValue,
+             Wire.MessageType.key.rawValue,
+             Wire.MessageType.keyReset.rawValue,
+             Wire.MessageType.enter.rawValue,
+             Wire.MessageType.leave.rawValue:
+            onInputFrame(type, body)
+        case Wire.MessageType.fileBegin.rawValue,
+             Wire.MessageType.fileChunk.rawValue,
+             Wire.MessageType.fileEnd.rawValue,
+             Wire.MessageType.fileAbort.rawValue:
+            onFileFrame(type, body)
+        default:
+            break
+        }
+    }
+
     func onPong(_ handler: @escaping @Sendable (UInt64) -> Void) {
         pendingPong = handler
+    }
+
+    /// Says the session's handlers are installed, and releases anything that
+    /// arrived in the meantime, in order.
+    func beginDelivery() {
+        queue.async { [weak self] in
+            guard let self else { return }
+            self.deliveringToSession = true
+            let pending = self.buffered
+            self.buffered = []
+            for frame in pending {
+                self.deliver(frame.type, frame.body)
+            }
+        }
     }
 }
 
