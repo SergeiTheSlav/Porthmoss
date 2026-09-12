@@ -249,3 +249,43 @@ func hex(b byte) string {
 	const digits = "0123456789abcdef"
 	return "0x" + string([]byte{digits[b>>4], digits[b&0xf]})
 }
+
+// TestSessionOutlivesHandshakeTimeout guards a bug that made every session die
+// a few seconds in: the handshake used SetDeadline, which sets a *write*
+// deadline too, and the dispatch loop only refreshed the read side. Once it
+// expired, a reply could fail midway through a TLS record and the Mac saw
+// stream corruption ("bad MAC") rather than a clean disconnect.
+func TestSessionOutlivesHandshakeTimeout(t *testing.T) {
+	if testing.Short() {
+		t.Skip("takes longer than the handshake timeout by design")
+	}
+	rig := newRig(t)
+	if _, err := dial(t, rig, "000000"); err == nil {
+		t.Fatal("expected failure before pairing")
+	}
+	c, err := dial(t, rig, <-rig.codes)
+	if err != nil {
+		t.Fatalf("pair: %v", err)
+	}
+
+	// Ping across the old deadline the way the Mac's heartbeat does, and read
+	// every reply: a corrupted record shows up here as a read error.
+	deadline := time.Now().Add(handshakeTimeout + 3*time.Second)
+	for id := uint64(0); time.Now().Before(deadline); id++ {
+		if err := c.send(proto.TypePing, proto.EncodeU64(id)); err != nil {
+			t.Fatalf("ping %d failed after %s: %v", id, handshakeTimeout, err)
+		}
+		c.conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+		frame, err := proto.ReadFrame(c.conn, c.buf)
+		if err != nil {
+			t.Fatalf("pong %d failed after %s: %v", id, handshakeTimeout, err)
+		}
+		if frame.Type != proto.TypePong {
+			t.Fatalf("expected PONG, got %s", hex(frame.Type))
+		}
+		if got, _ := proto.DecodeU64(frame.Body); got != id {
+			t.Fatalf("PONG id = %d, want %d", got, id)
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+}

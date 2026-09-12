@@ -26,6 +26,9 @@ const (
 	// idleTimeout is the dead-man switch: the Mac pings every 500 ms, so silence
 	// this long means the link is gone and everything held must be released.
 	idleTimeout = 2 * time.Second
+	// writeTimeout bounds a single reply. It is applied per write: a deadline
+	// left over from an earlier phase would eventually kill a healthy session.
+	writeTimeout = 2 * time.Second
 	// maxPairAttempts before the code is rotated, so a 6-digit code cannot be
 	// ground down by reconnecting.
 	maxPairAttempts = 5
@@ -130,6 +133,15 @@ func (s *Server) handle(ctx context.Context, conn net.Conn) error {
 		return err
 	}
 	s.Log.Info("controller connected", "name", name, "remote", conn.RemoteAddr())
+
+	// Drop the handshake deadline. SetDeadline set a *write* deadline too, and
+	// the loop below only ever refreshes the read side — leaving it in place
+	// makes every session die once it outlives handshakeTimeout, and because a
+	// timeout can land midway through a TLS record, the peer sees stream
+	// corruption ("bad MAC") rather than a clean disconnect.
+	if err := conn.SetDeadline(time.Time{}); err != nil {
+		return fmt.Errorf("clearing handshake deadline: %w", err)
+	}
 
 	buf := make([]byte, proto.MaxFrame)
 	for {
@@ -296,7 +308,7 @@ func (s *Server) dispatch(conn net.Conn, frame proto.Frame) error {
 		return s.Injector.MoveTo(m.X, m.Y)
 
 	case proto.TypePing:
-		return proto.WriteFrame(conn, proto.TypePong, frame.Body)
+		return writeFrame(conn, proto.TypePong, frame.Body)
 
 	case proto.TypePong:
 		return nil
@@ -307,6 +319,16 @@ func (s *Server) dispatch(conn net.Conn, frame proto.Frame) error {
 		s.Log.Debug("ignoring unknown message", "type", fmt.Sprintf("0x%02x", frame.Type))
 		return nil
 	}
+}
+
+// writeFrame sends one message under its own fresh deadline, so a slow or
+// wedged peer cannot block the session forever and no stale deadline can leak
+// in from an earlier phase.
+func writeFrame(conn net.Conn, typ byte, body []byte) error {
+	if err := conn.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
+		return err
+	}
+	return proto.WriteFrame(conn, typ, body)
 }
 
 func underlyingTCP(conn net.Conn) (*net.TCPConn, bool) {
