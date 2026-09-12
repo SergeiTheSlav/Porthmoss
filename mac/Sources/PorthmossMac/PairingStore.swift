@@ -97,7 +97,35 @@ enum PairingStore {
         guard let data = try? Data(contentsOf: fileURL),
               let entries = try? JSONDecoder().decode([String: Entry].self, from: data)
         else { return [:] }
-        return entries
+        return migrateInterfaceScopes(entries)
+    }
+
+    /// Earlier versions saved addresses with the interface scope Bonjour
+    /// reports — "192.168.0.7%en0". That pins a pairing to one interface, so
+    /// the same PC over Ethernet rather than Wi-Fi looked like a different,
+    /// unpaired machine. Rewrite them in place rather than making the user
+    /// pair again.
+    private static func migrateInterfaceScopes(_ entries: [String: Entry]) -> [String: Entry] {
+        var migrated: [String: Entry] = [:]
+        var changed = false
+        for (host, entry) in entries {
+            guard let percent = host.firstIndex(of: "%") else {
+                migrated[host] = entry
+                continue
+            }
+            let bare = String(host[..<percent])
+            // Only IPv4: an IPv6 link-local address needs its zone to be usable.
+            guard bare.split(separator: ".").count == 4,
+                  bare.split(separator: ".").allSatisfy({ UInt8($0) != nil })
+            else {
+                migrated[host] = entry
+                continue
+            }
+            migrated[bare] = entry
+            changed = true
+        }
+        if changed { try? write(migrated) }
+        return migrated
     }
 
     private static func write(_ entries: [String: Entry]) throws {

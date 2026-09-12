@@ -36,19 +36,12 @@ final class EventTap {
     }
 
     enum StartError: Error, CustomStringConvertible {
-        case permissionDenied
+        case permissionDenied(String)
 
         var description: String {
-            """
-            Porthmoss could not install its event tap.
-
-            Grant it both permissions in System Settings > Privacy & Security:
-              • Accessibility
-              • Input Monitoring
-
-            Then run it again. (Both are required: Accessibility to modify
-            events, Input Monitoring to see keystrokes at all.)
-            """
+            switch self {
+            case let .permissionDenied(detail): return detail
+            }
         }
     }
 
@@ -66,7 +59,18 @@ final class EventTap {
             },
             userInfo: refcon
         ) else {
-            throw StartError.permissionDenied
+            // Name the permission that is actually missing. A tap fails the
+            // same way whichever one it is, and "grant both" is no help to
+            // someone who has already granted one of them.
+            Permissions.request()
+            throw StartError.permissionDenied(
+                Permissions.problem ?? """
+                Porthmoss could not install its event tap, although both \
+                permissions look granted. Quit Porthmoss and open it again; \
+                if that does not help, turn Accessibility and Input Monitoring \
+                off and on again in System Settings › Privacy & Security.
+                """
+            )
         }
 
         machPort = port

@@ -141,7 +141,7 @@ final class AppModel: ObservableObject {
 
     /// Connects to one specific PC rather than to whatever settings holds.
     func connect(to host: String, port: UInt16) {
-        settings.agentHost = host
+        settings.agentHost = Discovery.stripZone(host)
         settings.agentPort = port
         connect()
     }

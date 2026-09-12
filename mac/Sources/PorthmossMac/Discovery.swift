@@ -63,10 +63,22 @@ enum Discovery {
     private static func displayString(_ host: NWEndpoint.Host) -> String {
         switch host {
         case let .name(name, _): return name
-        case let .ipv4(address): return "\(address)"
+        case let .ipv4(address): return stripZone("\(address)")
+        // An IPv6 link-local address is meaningless without its zone, so that
+        // one keeps the suffix.
         case let .ipv6(address): return "\(address)"
         @unknown default: return "\(host)"
         }
+    }
+
+    /// Drops the "%en0" interface scope Network.framework appends.
+    ///
+    /// It is not part of the address, and keeping it pins a saved pairing to
+    /// one interface: the same PC over Ethernet instead of Wi-Fi is then a
+    /// different, unpaired machine as far as this Mac is concerned.
+    static func stripZone(_ address: String) -> String {
+        guard let percent = address.firstIndex(of: "%") else { return address }
+        return String(address[..<percent])
     }
 }
 
