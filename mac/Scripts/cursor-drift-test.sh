@@ -24,11 +24,13 @@ echo "Building…"
 swiftc -swift-version 5 -O "$ROOT/mac/Scripts/cursor-drift-probe.swift" -o "$WORK/probe" || exit 2
 
 MAC="$ROOT/mac/.build/debug/PorthmossMac"
-# The probe pairs from scratch, so any stored pairing for loopback is in the way.
-PAIRINGS="$HOME/Library/Application Support/Porthmoss/pairings.json"
-[ -f "$PAIRINGS" ] && cp "$PAIRINGS" "$WORK/pairings.backup"
-rm -f "$PAIRINGS"
-restore() { [ -f "$WORK/pairings.backup" ] && cp "$WORK/pairings.backup" "$PAIRINGS"; }
+# Its own configuration, so the test pairs from scratch and — more importantly
+# — cannot disturb the user's. It drives this Mac with synthetic input, and
+# synthetic keystrokes land in whatever has focus.
+export PORTHMOSS_CONFIG_DIR="$WORK/config"
+mkdir -p "$PORTHMOSS_CONFIG_DIR"
+printf '{"edge":"right","agentHost":"127.0.0.1"}' > "$PORTHMOSS_CONFIG_DIR/settings.json"
+restore() { :; }
 
 "$WORK/agent" --console --port "$PORT" --bind 127.0.0.1 --no-mdns --state "$WORK/state" > "$WORK/agent.log" 2>&1 &
 sleep 1

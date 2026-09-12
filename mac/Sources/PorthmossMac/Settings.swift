@@ -17,9 +17,24 @@ struct Settings: Equatable {
     /// How much trackpad movement makes one Windows wheel notch.
     var pixelsPerNotch = 12.0
 
+    /// Where configuration lives.
+    ///
+    /// PORTHMOSS_CONFIG_DIR redirects it, which the test scripts use. They
+    /// drive this Mac with synthetic input, and synthetic keystrokes land in
+    /// whatever has focus — more than once that was the settings panel, which
+    /// silently changed the user's crossing edge and then failed a test that
+    /// had nothing to do with it.
+    static var configDirectory: URL {
+        if let override = ProcessInfo.processInfo.environment["PORTHMOSS_CONFIG_DIR"] {
+            return URL(fileURLWithPath: override, isDirectory: true)
+        }
+        return FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Porthmoss")
+    }
+
     static var fileURL: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return base.appendingPathComponent("Porthmoss/settings.json")
+        configDirectory.appendingPathComponent("settings.json")
     }
 
     static func load() -> Settings {

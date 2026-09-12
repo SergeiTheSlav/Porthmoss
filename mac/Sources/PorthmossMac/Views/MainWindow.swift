@@ -115,7 +115,11 @@ private struct StatusPanel: View {
         case let .connecting(host): return "Connecting to \(host)"
         case let .pairing(host): return "Pairing with \(host)"
         case let .connected(host):
-            return model.isControllingPC ? "Controlling \(host)" : "Connected to \(host)"
+            switch model.direction {
+            case .drivingPC: return "Controlling \(host)"
+            case .drivenByPC: return "\(host) is controlling this Mac"
+            case .none: return "Connected to \(host)"
+            }
         case .failed: return "Couldn’t connect"
         }
     }
@@ -130,7 +134,12 @@ private struct StatusPanel: View {
 
     private var icon: String {
         switch model.state {
-        case .connected: return model.isControllingPC ? "arrow.right.circle.fill" : "checkmark.circle.fill"
+        case .connected:
+            switch model.direction {
+            case .drivingPC: return "arrow.right.circle.fill"
+            case .drivenByPC: return "arrow.left.circle.fill"
+            case .none: return "checkmark.circle.fill"
+            }
         case .failed: return "exclamationmark.triangle.fill"
         default: return "display"
         }
@@ -138,7 +147,14 @@ private struct StatusPanel: View {
 
     private var dotColour: Color {
         switch model.state {
-        case .connected: return model.isControllingPC ? .blue : .green
+        case .connected:
+            switch model.direction {
+            case .drivingPC: return .blue
+            // Purple rather than blue: being driven is a different situation
+            // from driving, and the two should not look alike at a glance.
+            case .drivenByPC: return .purple
+            case .none: return .green
+            }
         case .failed: return .orange
         default: return .secondary
         }
@@ -146,7 +162,7 @@ private struct StatusPanel: View {
 
     private var tint: Color? {
         switch model.state {
-        case .connected: return (model.isControllingPC ? Color.blue : .green).opacity(0.10)
+        case .connected: return dotColour.opacity(0.10)
         case .failed: return Color.orange.opacity(0.10)
         default: return nil
         }

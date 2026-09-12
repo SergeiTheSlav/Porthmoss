@@ -34,6 +34,18 @@ struct PorthmossApp: App {
         _model = StateObject(wrappedValue: AppModel(settings: AppLaunch.settings))
     }
 
+    /// Which way input is flowing, at a glance. The filled variants mean input
+    /// is crossing right now; the arrow says which way.
+    private var menuBarGlyph: String {
+        switch model.direction {
+        case .drivingPC: return "arrow.right.circle.fill"
+        case .drivenByPC: return "arrow.left.circle.fill"
+        case .none: return model.isConnected
+            ? "arrow.left.arrow.right.circle"
+            : "arrow.left.arrow.right"
+        }
+    }
+
     var body: some Scene {
         Window("Porthmoss", id: "main") {
             MainWindow()
@@ -51,10 +63,7 @@ struct PorthmossApp: App {
         } label: {
             // Filled while the PC is being driven, so the menu bar answers
             // "where is my keyboard going?" without opening anything.
-            Image(systemName: model.isControllingPC
-                  ? "arrow.left.arrow.right.circle.fill"
-                  : (model.isConnected ? "arrow.left.arrow.right.circle"
-                                       : "arrow.left.arrow.right"))
+            Image(systemName: menuBarGlyph)
         }
     }
 }

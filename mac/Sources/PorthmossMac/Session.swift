@@ -33,7 +33,7 @@ final class Session: @unchecked Sendable {
     private var lastPongAt = Date()
     private var nextPingID: UInt64 = 1
 
-    var onStatus: (String) -> Void = { print($0) }
+    var onEvent: (SessionEvent) -> Void = { print($0.message) }
 
     init(connection: AgentConnection, screens: RemoteScreens, settings: Settings) {
         self.connection = connection
@@ -53,8 +53,8 @@ final class Session: @unchecked Sendable {
         tap.onTimeout = { [weak self] count in
             // The tap only stalls if this callback is slow. If it ever shows up
             // in the field, the input path needs to get off the callback thread.
-            self?.onStatus("warning: event tap stalled and was re-enabled (\(count)x) — "
-                + "some input may have reached the Mac instead of the PC")
+            self?.onEvent(.note("warning: event tap stalled and was re-enabled (\(count)x) — "
+                + "some input may have reached the Mac instead of the PC"))
         }
         try tap.start()
         self.tap = tap
@@ -90,7 +90,7 @@ final class Session: @unchecked Sendable {
         }
 
         startHeartbeat()
-        onStatus("Ready. Push the \(settings.capture.edge.rawValue) edge to take over the PC.")
+        onEvent(.ready("Ready. Push the \(settings.capture.edge.rawValue) edge to take over the PC."))
     }
 
     /// Takes new settings without tearing the link down.
@@ -103,7 +103,7 @@ final class Session: @unchecked Sendable {
         // cursor with no way home that matches what the user just chose.
         if new.capture.edge != settings.capture.edge, model.isRemote {
             releaseControl(model.forceReturn(), announce: false)
-            onStatus("Settings applied — control returned to the Mac.")
+            onEvent(.stoppedDrivingPC("Settings applied — control returned to the Mac."))
         }
         settings = new
         model.config = new.capture
@@ -111,10 +111,7 @@ final class Session: @unchecked Sendable {
 
     func stop() {
         // Whatever the PC was holding down must not outlive the session.
-        if isControlledByPC {
-            injector.releaseAll()
-            isControlledByPC = false
-        }
+        releaseFromPC(reason: "the session ended")
         clipboard?.stop()
         clipboard = nil
         pingTimer?.invalidate()
@@ -134,21 +131,41 @@ final class Session: @unchecked Sendable {
             self.connection.post(.ping, Wire.pingBody(self.nextPingID))
             self.nextPingID &+= 1
 
-            // The dead-man switch. If Wi-Fi drops while the Mac is driving
-            // Windows, the user must not be left without a cursor on either
-            // machine, so control comes home before anything else is tried.
-            if self.model.isRemote, Date().timeIntervalSince(self.lastPongAt) > 2.0 {
+            // The dead-man switch, in both directions. Whichever machine is
+            // driving, a link that has gone quiet must not leave the user
+            // stranded — and the two failures are not symmetric in how bad
+            // they are. Driving the PC and losing the link leaves the Mac
+            // without a cursor; *being* driven and losing the link leaves
+            // whatever the PC was holding down held, so every key the user
+            // presses afterwards does the wrong thing.
+            guard Date().timeIntervalSince(self.lastPongAt) > 2.0 else { return }
+            if self.model.isRemote {
                 self.panic("agent stopped responding")
             }
+            if self.isControlledByPC {
+                self.releaseFromPC(reason: "the PC stopped responding")
+            }
         }
+    }
+
+    /// Hands control back to this Mac's own keyboard and mouse.
+    ///
+    /// Releases everything the PC was holding first. It also clears
+    /// `isControlledByPC`, which is what re-enables this Mac's edge detection:
+    /// without that the user could not push across to the PC again either.
+    private func releaseFromPC(reason: String) {
+        guard isControlledByPC else { return }
+        injector.releaseAll()
+        isControlledByPC = false
+        onEvent(.stoppedBeingDriven("Control returned to this Mac — \(reason)."))
     }
 
     private func panic(_ reason: String) {
         if model.isRemote {
             releaseControl(model.forceReturn(), announce: false)
-            onStatus("Control returned to the Mac — \(reason).")
+            onEvent(.stoppedDrivingPC("Control returned to the Mac — \(reason)."))
         } else {
-            onStatus("\(reason.prefix(1).uppercased())\(reason.dropFirst()).")
+            onEvent(.note("\(reason.prefix(1).uppercased())\(reason.dropFirst())."))
         }
     }
 
@@ -164,6 +181,16 @@ final class Session: @unchecked Sendable {
         }
         // While the PC has control, this Mac is a target: its own edge
         // detection must stay out of the way.
+        //
+        // Note what this does *not* do: the event is passed through, not
+        // swallowed, so the user's own trackpad still moves this Mac's cursor
+        // and fights the position the PC is injecting. That is deliberate, for
+        // two reasons. It keeps the two ends symmetric — the PC does not
+        // consume its local input while the Mac drives it either. And more
+        // importantly, swallowing would mean a PC that wedges mid-session
+        // locks the user out of their own laptop, with the escape hotkey
+        // living on the machine that has stopped responding. A cursor being
+        // fought over is a nuisance; a laptop that ignores its owner is not.
         if isControlledByPC { return false }
         switch type {
         case .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged:
@@ -222,7 +249,7 @@ final class Session: @unchecked Sendable {
         case let .enterRemote(x, y):
             CursorControl.capture(parkingAt: cursor)
             connection.post(.enter, Wire.mouseMoveBody(x: x, y: y))
-            onStatus("Controlling the PC.")
+            onEvent(.startedDrivingPC)
             // Dragging files across the edge sends them. There is no way to
             // hand a real drop to Windows from here, so they land in a folder
             // on the PC and it says so.
@@ -263,9 +290,9 @@ final class Session: @unchecked Sendable {
     /// Streams files to the PC off the main thread. Reading a large file in
     /// the event tap callback would stall every input event behind it.
     private func sendFiles(_ urls: [URL], fromClipboard: Bool = false) {
-        onStatus(urls.count == 1
+        onEvent(.note(urls.count == 1
                  ? "Sending \(urls[0].lastPathComponent)…"
-                 : "Sending \(urls.count) files…")
+                 : "Sending \(urls.count) files…"))
         let connection = self.connection
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             for (index, url) in urls.enumerated() {
@@ -278,15 +305,15 @@ final class Session: @unchecked Sendable {
                 } catch {
                     connection.post(.fileAbort, Array(error.localizedDescription.utf8))
                     DispatchQueue.main.async {
-                        self?.onStatus(error.localizedDescription)
+                        self?.onEvent(.note(error.localizedDescription))
                     }
                     return
                 }
             }
             DispatchQueue.main.async {
-                self?.onStatus(urls.count == 1
+                self?.onEvent(.note(urls.count == 1
                                ? "Sent \(urls[0].lastPathComponent) to the PC."
-                               : "Sent \(urls.count) files to the PC.")
+                               : "Sent \(urls.count) files to the PC."))
             }
         }
     }
@@ -301,11 +328,9 @@ final class Session: @unchecked Sendable {
                 isControlledByPC = true
                 injector.refreshDisplays()
                 injector.enter(x: move.x, y: move.y)
-                onStatus("The PC is controlling this Mac.")
+                onEvent(.startedBeingDriven)
             case .leave:
-                injector.releaseAll()
-                isControlledByPC = false
-                onStatus("The PC handed control back.")
+                releaseFromPC(reason: "it handed control back")
             case .mouseMove:
                 let move = try Wire.decodeMouseMove(body)
                 injector.moveTo(x: move.x, y: move.y)
@@ -326,7 +351,7 @@ final class Session: @unchecked Sendable {
                 break
             }
         } catch {
-            onStatus("Input from the PC was malformed.")
+            onEvent(.note("Input from the PC was malformed."))
         }
     }
 
@@ -349,18 +374,18 @@ final class Session: @unchecked Sendable {
                 // pasteboard once the last file has landed.
                 if let batch = incoming.completedClipboardBatch {
                     clipboard?.applyRemoteFiles(batch)
-                    onStatus(batch.count == 1
+                    onEvent(.note(batch.count == 1
                              ? "\(url.lastPathComponent) is ready to paste."
-                             : "\(batch.count) files are ready to paste.")
+                             : "\(batch.count) files are ready to paste."))
                 } else {
-                    onStatus("Received \(url.lastPathComponent) from the PC.")
+                    onEvent(.note("Received \(url.lastPathComponent) from the PC."))
                 }
             default:
                 incoming.discard()
             }
         } catch {
             incoming.discard()
-            onStatus("File from the PC failed: \(error.localizedDescription)")
+            onEvent(.note("File from the PC failed: \(error.localizedDescription)"))
         }
     }
 
@@ -374,7 +399,7 @@ final class Session: @unchecked Sendable {
         }
         connection.post(.leave)
         CursorControl.release(to: point)
-        if announce { onStatus("Back on the Mac.") }
+        if announce { onEvent(.stoppedDrivingPC("Back on the Mac.")) }
         return true
     }
 

@@ -32,8 +32,7 @@ enum PairingStore {
     }
 
     static var fileURL: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return base.appendingPathComponent("Porthmoss/pairings.json")
+        Settings.configDirectory.appendingPathComponent("pairings.json")
     }
 
     static func load(agent: String) -> Pairing? {

@@ -72,7 +72,13 @@ final class AppModel: ObservableObject {
     @Published private(set) var screens: RemoteScreens?
     @Published private(set) var discovered: [Discovery.Agent] = []
     @Published private(set) var saved: [PairingStore.SavedPC] = []
-    @Published private(set) var isControllingPC = false
+    /// Which way input is flowing. The UI needs both directions: a Mac being
+    /// driven by the PC is not the same thing as a Mac sitting connected and
+    /// idle, and it used to render identically.
+    @Published private(set) var direction: ControlDirection = .none
+
+    var isControllingPC: Bool { direction == .drivingPC }
+    var isDrivenByPC: Bool { direction == .drivenByPC }
     /// Non-nil while a pairing sheet should be on screen.
     @Published var pairingRequest: PairingRequest?
 
@@ -265,8 +271,8 @@ final class AppModel: ObservableObject {
             guard let connection else { return }
 
             let session = Session(connection: connection, screens: screens, settings: settings)
-            session.onStatus = { [weak self] line in
-                Task { @MainActor in self?.handleSessionStatus(line) }
+            session.onEvent = { [weak self] event in
+                Task { @MainActor in self?.handle(event) }
             }
             do {
                 try session.start()
@@ -285,12 +291,23 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func handleSessionStatus(_ line: String) {
-        statusLine = line
-        isControllingPC = line.hasPrefix("Controlling")
-        if line.hasPrefix("Connection lost") {
-            state = .failed(line)
+    private func handle(_ event: SessionEvent) {
+        statusLine = event.message
+        switch event {
+        case .startedDrivingPC:
+            direction = .drivingPC
+        case .startedBeingDriven:
+            direction = .drivenByPC
+        case .stoppedDrivingPC, .stoppedBeingDriven:
+            direction = .none
+        case let .connectionLost(reason):
+            direction = .none
+            state = .failed(reason)
             teardown()
+        case .ready, .note:
+            // Deliberately no change of direction. A transfer reporting
+            // "Sending…" mid-session must not read as control coming home.
+            break
         }
     }
 
@@ -309,7 +326,7 @@ final class AppModel: ObservableObject {
         // closes the socket.
         connection?.stop()
         connection = nil
-        isControllingPC = false
+        direction = .none
     }
 
     func unpair() {

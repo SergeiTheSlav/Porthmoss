@@ -10,10 +10,18 @@ few bytes per mouse movement.
 
 ## Status
 
-The control path works end to end: pairing, edge crossing, mouse, keyboard,
-scroll, and the safety releases. Both ends have a UI — a menu bar app on the
-Mac, a notification-area icon and window on the PC. Clipboard sync and
-drag-and-drop are not built yet.
+Mac → PC works end to end and is what has actually been used: pairing, edge
+crossing, mouse, keyboard, scroll, and the safety releases. Both ends have a
+UI — a menu bar app on the Mac, a notification-area icon and window on the PC.
+
+Clipboard text and files are shared both ways, and files dragged from the Mac
+land on the PC. Dragging *off* Windows is not possible from outside the
+application that starts the drag, so that direction goes through copy and paste.
+
+PC → Mac input exists on both ends but **has never been run against a real
+pair of machines**: the Mac's injector is tested (`make test-injector`), the
+Windows capture path is tested on Windows, and the two have not met. See
+`docs/reverse-control-windows.md`.
 
 ## How it works
 
