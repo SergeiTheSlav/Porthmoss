@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Foundation
 import PorthmossCore
@@ -24,6 +25,7 @@ final class Session: @unchecked Sendable {
     private var scrollRemainderY = 0.0
 
     private var clipboard: ClipboardBridge?
+    private let incoming = FileTransfer.Receiver()
     private var pingTimer: Timer?
     private var lastPongAt = Date()
     private var nextPingID: UInt64 = 1
@@ -68,6 +70,10 @@ final class Session: @unchecked Sendable {
         }
         clipboard.start()
         self.clipboard = clipboard
+
+        connection.onFileFrame = { [weak self] type, body in
+            DispatchQueue.main.async { self?.receiveFileFrame(type, body) }
+        }
 
         startHeartbeat()
         onStatus("Ready. Push the \(settings.capture.edge.rawValue) edge to take over the PC.")
@@ -133,7 +139,7 @@ final class Session: @unchecked Sendable {
     private func handle(type: CGEventType, event: CGEvent) -> Bool {
         switch type {
         case .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged:
-            return handleMotion(event)
+            return handleMotion(event, dragging: type == .leftMouseDragged)
 
         case .leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp,
              .otherMouseDown, .otherMouseUp:
@@ -159,7 +165,7 @@ final class Session: @unchecked Sendable {
     private static let trace = ProcessInfo.processInfo.environment["PORTHMOSS_TRACE"] == "1"
     private var traced = 0
 
-    private func handleMotion(_ event: CGEvent) -> Bool {
+    private func handleMotion(_ event: CGEvent, dragging: Bool = false) -> Bool {
         let delta = Point(
             x: Double(event.getIntegerValueField(.mouseEventDeltaX)),
             y: Double(event.getIntegerValueField(.mouseEventDeltaY))
@@ -189,6 +195,13 @@ final class Session: @unchecked Sendable {
             CursorControl.capture(parkingAt: cursor)
             connection.post(.enter, Wire.mouseMoveBody(x: x, y: y))
             onStatus("Controlling the PC.")
+            // Dragging files across the edge sends them. There is no way to
+            // hand a real drop to Windows from here, so they land in a folder
+            // on the PC and it says so.
+            if dragging {
+                let files = Session.filesBeingDragged()
+                if !files.isEmpty { sendFiles(files) }
+            }
             return true
         case let .moveRemote(x, y):
             // Undo whatever the window server did with this movement before
@@ -204,6 +217,71 @@ final class Session: @unchecked Sendable {
     /// `announce` is false when the caller reports the release itself, so a
     /// dropped connection does not produce two messages about the same event.
     @discardableResult
+    /// The files in the drag currently under the cursor, if it is a file drag.
+    ///
+    /// macOS has no way to ask "is a drag in progress" from outside the app
+    /// that started it, but the drag pasteboard holds the payload for the
+    /// duration, and a left-button drag crossing the edge with file URLs on it
+    /// is that question answered well enough.
+    private static func filesBeingDragged() -> [URL] {
+        let pasteboard = NSPasteboard(name: .drag)
+        let options: [NSPasteboard.ReadingOptionKey: Any] = [
+            .init(rawValue: NSPasteboard.ReadingOptionKey.urlReadingFileURLsOnly.rawValue): true,
+        ]
+        let found = pasteboard.readObjects(forClasses: [NSURL.self], options: options)
+        return (found as? [URL]) ?? []
+    }
+
+    /// Streams files to the PC off the main thread. Reading a large file in
+    /// the event tap callback would stall every input event behind it.
+    private func sendFiles(_ urls: [URL]) {
+        onStatus(urls.count == 1
+                 ? "Sending \(urls[0].lastPathComponent)…"
+                 : "Sending \(urls.count) files…")
+        let connection = self.connection
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            for (index, url) in urls.enumerated() {
+                do {
+                    try FileTransfer.send(url, index: index, total: urls.count) { type, body in
+                        connection.post(type, body)
+                    }
+                } catch {
+                    connection.post(.fileAbort, Array(error.localizedDescription.utf8))
+                    DispatchQueue.main.async {
+                        self?.onStatus(error.localizedDescription)
+                    }
+                    return
+                }
+            }
+            DispatchQueue.main.async {
+                self?.onStatus(urls.count == 1
+                               ? "Sent \(urls[0].lastPathComponent) to the PC."
+                               : "Sent \(urls.count) files to the PC.")
+            }
+        }
+    }
+
+    /// Applies one file-transfer frame from the PC.
+    private func receiveFileFrame(_ type: UInt8, _ body: [UInt8]) {
+        do {
+            switch type {
+            case Wire.MessageType.fileBegin.rawValue:
+                let begin = try Wire.decodeFileBegin(body)
+                try incoming.begin(name: begin.name, size: begin.size)
+            case Wire.MessageType.fileChunk.rawValue:
+                try incoming.chunk(body)
+            case Wire.MessageType.fileEnd.rawValue:
+                let url = try incoming.end()
+                onStatus("Received \(url.lastPathComponent) from the PC.")
+            default:
+                incoming.discard()
+            }
+        } catch {
+            incoming.discard()
+            onStatus("File from the PC failed: \(error.localizedDescription)")
+        }
+    }
+
     private func releaseControl(
         _ action: CaptureAction?, announce: Bool = true,
         origin: String = #function, line: Int = #line

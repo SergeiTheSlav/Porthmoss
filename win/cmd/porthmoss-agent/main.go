@@ -74,6 +74,11 @@ func run() error {
 		return nil
 	}
 
+	dropDir, err := defaultDropDir()
+	if err != nil {
+		return err
+	}
+
 	injector, err := inject.New()
 	if err != nil {
 		return fmt.Errorf("input backend: %w", err)
@@ -108,6 +113,11 @@ func run() error {
 				presenter.publish()
 			},
 			OnQuit: cancel,
+			OnOpenDropFolder: func() {
+				if err := openFolder(dropDir); err != nil {
+					log.Warn("could not open the drop folder", "err", err)
+				}
+			},
 		})
 	}
 	presenter.ui = front
@@ -120,10 +130,14 @@ func run() error {
 	}
 
 	srv := &server.Server{
-		Addr:          net.JoinHostPort(*bind, strconv.Itoa(*port)),
-		Identity:      identity,
-		Injector:      injector,
-		Clipboard:     clipboard.New(),
+		Addr:      net.JoinHostPort(*bind, strconv.Itoa(*port)),
+		Identity:  identity,
+		Injector:  injector,
+		Clipboard: clipboard.New(),
+		DropDir:   dropDir,
+		OnFileReceived: func(path string, _, _ int) {
+			presenter.fileReceived(path)
+		},
 		Log:           log,
 		OnPairingCode: presenter.setCode,
 		OnListening:   presenter.setAddress,
@@ -158,6 +172,8 @@ type presenter struct {
 	code      string
 	peer      string
 	connected bool
+	lastFile  string
+	dropDir   string
 }
 
 func (p *presenter) setAddress(addr string) {
@@ -186,9 +202,21 @@ func (p *presenter) setSession(connected bool, peer string) {
 	p.publish()
 }
 
+// fileReceived notes an arrival so the window can mention it. Kept to the last
+// one: a running log belongs in the folder, not in a status panel.
+func (p *presenter) fileReceived(path string) {
+	p.mu.Lock()
+	p.lastFile = filepath.Base(path)
+	p.dropDir = filepath.Dir(path)
+	p.mu.Unlock()
+	p.publish()
+}
+
 func (p *presenter) publish() {
 	p.mu.Lock()
 	state := ui.State{
+		LastFile:    p.lastFile,
+		DropDir:     p.dropDir,
 		Address:     p.address,
 		Display:     p.display,
 		Code:        p.code,
@@ -222,6 +250,16 @@ func (p *presenter) publish() {
 	if p.ui != nil {
 		p.ui.Update(state)
 	}
+}
+
+// defaultDropDir is where files dragged from the Mac land. Downloads is where
+// a user already looks for something that arrived from elsewhere.
+func defaultDropDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("locate home directory: %w", err)
+	}
+	return filepath.Join(home, "Downloads", "Porthmoss"), nil
 }
 
 func defaultStateDir() (string, error) {

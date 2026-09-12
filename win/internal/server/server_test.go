@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"crypto/tls"
@@ -8,6 +9,8 @@ import (
 	"errors"
 	"log/slog"
 	"net"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 	"time"
@@ -367,4 +370,72 @@ func waitForFreeSlot(t *testing.T, rig *testRig) {
 		}
 	}
 	t.Fatal("the agent never released its controller slot")
+}
+
+// TestFileArrivesInTheDropFolder drives a whole transfer through a real
+// session: BEGIN, chunks, END, and the file on disk at the other end.
+func TestFileArrivesInTheDropFolder(t *testing.T) {
+	rig := newRig(t)
+	dropDir := t.TempDir()
+	rig.srv.DropDir = dropDir
+
+	if _, err := dial(t, rig, "000000"); err == nil {
+		t.Fatal("expected failure before pairing")
+	}
+	c, err := dial(t, rig, <-rig.codes)
+	if err != nil {
+		t.Fatalf("pair: %v", err)
+	}
+
+	// Larger than one chunk, so the reassembly is actually exercised.
+	content := bytes.Repeat([]byte("porthmoss"), 40000)
+	begin := proto.FileBegin{Name: "notes.txt", Size: uint64(len(content)), Total: 1}
+	mustSend(t, c, proto.TypeFileBegin, begin.Encode())
+	for offset := 0; offset < len(content); offset += proto.FileChunkSize {
+		end := min(offset+proto.FileChunkSize, len(content))
+		mustSend(t, c, proto.TypeFileChunk, content[offset:end])
+	}
+	mustSend(t, c, proto.TypeFileEnd, nil)
+	time.Sleep(300 * time.Millisecond)
+
+	got, err := os.ReadFile(filepath.Join(dropDir, "notes.txt"))
+	if err != nil {
+		t.Fatalf("the file did not arrive: %v", err)
+	}
+	if !bytes.Equal(got, content) {
+		t.Errorf("received %d bytes, sent %d", len(got), len(content))
+	}
+}
+
+// TestFileCannotEscapeTheDropFolder is the one that matters: the name is
+// chosen by whatever is at the other end of the socket.
+func TestFileCannotEscapeTheDropFolder(t *testing.T) {
+	rig := newRig(t)
+	parent := t.TempDir()
+	dropDir := filepath.Join(parent, "drop")
+	rig.srv.DropDir = dropDir
+
+	if _, err := dial(t, rig, "000000"); err == nil {
+		t.Fatal("expected failure before pairing")
+	}
+	c, err := dial(t, rig, <-rig.codes)
+	if err != nil {
+		t.Fatalf("pair: %v", err)
+	}
+
+	content := []byte("owned")
+	begin := proto.FileBegin{Name: "../escaped.txt", Size: uint64(len(content)), Total: 1}
+	mustSend(t, c, proto.TypeFileBegin, begin.Encode())
+	mustSend(t, c, proto.TypeFileChunk, content)
+	mustSend(t, c, proto.TypeFileEnd, nil)
+	time.Sleep(300 * time.Millisecond)
+
+	if _, err := os.Stat(filepath.Join(parent, "escaped.txt")); err == nil {
+		t.Fatal("a file was written outside the drop folder")
+	}
+	// The session must survive a rejected file: the user is still holding a
+	// mouse that has to keep working.
+	if err := c.send(proto.TypePing, proto.EncodeU64(1)); err != nil {
+		t.Errorf("the session died over a rejected file: %v", err)
+	}
 }

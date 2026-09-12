@@ -30,6 +30,8 @@ final class AgentConnection: @unchecked Sendable {
     var onDisconnect: @Sendable (String) -> Void = { _ in }
     /// Text the PC copied.
     var onClipboardText: @Sendable (String) -> Void = { _ in }
+    /// A file-transfer frame from the PC: type and body, applied in order.
+    var onFileFrame: @Sendable (UInt8, [UInt8]) -> Void = { _, _ in }
 
     private let host: String
     private let port: UInt16
@@ -297,6 +299,11 @@ final class AgentConnection: @unchecked Sendable {
                     if let id = try? Wire.decodeU64(frame.body) { self.pendingPong(id) }
                 case Wire.MessageType.clipboardText.rawValue:
                     self.onClipboardText(String(decoding: frame.body, as: UTF8.self))
+                case Wire.MessageType.fileBegin.rawValue,
+                     Wire.MessageType.fileChunk.rawValue,
+                     Wire.MessageType.fileEnd.rawValue,
+                     Wire.MessageType.fileAbort.rawValue:
+                    self.onFileFrame(frame.type, frame.body)
                 default:
                     break
                 }

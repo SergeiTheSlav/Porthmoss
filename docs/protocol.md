@@ -67,6 +67,31 @@ Key events carry **PS/2 set-1 scancodes**, not virtual key codes, so the
 agent never has to know the Mac's keyboard layout. The Mac is responsible for
 Cmd->Ctrl and other modifier remapping before it gets here.
 
+## Clipboard
+
+    0x50 CLIPBOARD_TEXT  utf-8 bytes
+
+Both ends poll their own clipboard and send changes. The hard part is not
+copying text but not echoing it: writing what the other machine sent changes
+the local clipboard, the watcher notices, and the two bounce it between them.
+Each side guards with both the clipboard's change counter and the last text it
+wrote.
+
+## File transfer
+
+One file at a time, in order. Deliberately not interleaved: two at once would
+need stream ids and a scheduler, to save a user dragging a folder half a second.
+
+    0x60 FILE_BEGIN  u16 name_len, name, u64 size, u16 index, u16 total
+    0x61 FILE_CHUNK  bytes, at most 256 KiB
+    0x62 FILE_END    -
+    0x63 FILE_ABORT  str reason
+
+`name` is chosen by the sender and so is attacker-controlled. The receiver must
+reduce it to a single path component — no separators, no `..`, no reserved DOS
+device name, no trailing dot or space — and must never overwrite an existing
+file. A rejected file is answered with ABORT and does not end the session.
+
 ## Session messages
 
     0x30 ENTER   u16 x, u16 y   Mac took control; agent shows cursor at x,y

@@ -21,6 +21,10 @@ type State struct {
 	Paired bool   `json:"paired"`
 	// Controlled means a Mac is driving this PC right now.
 	Controlled bool `json:"controlled"`
+	// LastFile is the most recent file dragged over from the Mac.
+	LastFile string `json:"lastFile"`
+	// DropDir is the folder those files land in.
+	DropDir string `json:"dropDir"`
 }
 
 // UI is the agent's front end. The console implementation is the fallback and
@@ -45,6 +49,10 @@ type Options struct {
 	OnUnpair func()
 	// OnQuit is invoked when the user quits from the tray.
 	OnQuit func()
+
+	// OnOpenDropFolder is invoked when the user asks to see the files that
+	// have arrived from the Mac.
+	OnOpenDropFolder func()
 }
 
 // GroupFingerprint breaks a hex fingerprint into 4-character groups, so it can

@@ -40,7 +40,25 @@ const (
 
 	// TypeClipboardText carries UTF-8 text in either direction.
 	TypeClipboardText = 0x50
+
+	// File transfer. One file at a time, in order: BEGIN, then CHUNK until the
+	// declared size has arrived, then END. ABORT may replace END at any point.
+	// Deliberately not interleaved — two files at once would need stream ids
+	// and a scheduler, to save a user dragging a folder about half a second.
+	TypeFileBegin = 0x60
+	TypeFileChunk = 0x61
+	TypeFileEnd   = 0x62
+	TypeFileAbort = 0x63
 )
+
+// FileChunkSize is what a sender should put in one CHUNK. Well under MaxFrame,
+// so a chunk plus its framing can never be rejected as oversized.
+const FileChunkSize = 256 * 1024
+
+// MaxFileSize bounds a single transfer. This is a convenience for dragging a
+// document across, not a backup tool, and an accidental 4 GB drag should fail
+// immediately rather than after ten minutes.
+const MaxFileSize = 512 << 20
 
 var ErrFrameTooLarge = errors.New("proto: frame exceeds maximum size")
 

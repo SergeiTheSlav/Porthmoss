@@ -169,6 +169,15 @@ button:disabled { opacity: 0.4; }
   <div class="footnote">Your Mac checks this identity on every connection and refuses if it changes.</div>
 </div>
 
+<div class="card hidden" id="file-card">
+  <h2>Dragged over from your Mac</h2>
+  <div class="row"><span class="k">Latest</span><span class="v" id="last-file">—</span></div>
+  <div class="actions" style="margin-top:10px">
+    <button id="open-folder">Open folder</button>
+  </div>
+  <div class="footnote" id="drop-dir"></div>
+</div>
+
 <div class="card">
   <div class="actions">
     <button id="unpair">Forget paired Mac</button>
@@ -195,9 +204,13 @@ function render(s) {
   el("code").textContent = s.code || "------";
   el("pairing-card").classList.toggle("hidden", !s.code);
   el("unpair").disabled = !s.paired;
+  el("last-file").textContent = s.lastFile || "—";
+  el("drop-dir").textContent = s.dropDir || "";
+  el("file-card").classList.toggle("hidden", !s.lastFile);
 }
 document.getElementById("unpair").onclick = () => window.unpair();
 document.getElementById("hide").onclick = () => window.hideWindow();
+document.getElementById("open-folder").onclick = () => window.openDropFolder();
 // Go pushes state in by calling window.applyState(...).
 window.applyState = render;
 window.addEventListener("DOMContentLoaded", () => window.ready && window.ready());

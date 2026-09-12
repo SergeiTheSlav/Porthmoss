@@ -135,6 +135,11 @@ func (w *WindowsUI) runWebView() {
 		}
 	})
 	_ = view.Bind("hideWindow", func() { w.Hide() })
+	_ = view.Bind("openDropFolder", func() {
+		if w.opts.OnOpenDropFolder != nil {
+			w.opts.OnOpenDropFolder()
+		}
+	})
 	_ = view.Bind("ready", func() {
 		// The page is live: replay whatever state arrived before it loaded.
 		w.mu.Lock()

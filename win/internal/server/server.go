@@ -16,6 +16,7 @@ import (
 	"github.com/janjamscikov/porthmoss/win/internal/inject"
 	"github.com/janjamscikov/porthmoss/win/internal/pairing"
 	"github.com/janjamscikov/porthmoss/win/internal/proto"
+	"github.com/janjamscikov/porthmoss/win/internal/transfer"
 )
 
 const (
@@ -56,6 +57,13 @@ type Server struct {
 
 	// Clipboard, when set, is kept in step with the Mac's.
 	Clipboard clipboard.Clipboard
+
+	// DropDir is where files dragged from the Mac land. Empty disables
+	// receiving them.
+	DropDir string
+
+	// OnFileReceived reports a completed file, so the UI can offer to open it.
+	OnFileReceived func(path string, index, total int)
 
 	mu           sync.Mutex
 	busy         bool
@@ -180,6 +188,13 @@ func (s *Server) handle(ctx context.Context, conn net.Conn) error {
 		go clip.watch(sessionCtx, send)
 	}
 
+	var incoming *transfer.Receiver
+	if s.DropDir != "" {
+		incoming = &transfer.Receiver{Dir: s.DropDir}
+		// A half-written file must not survive the session that was sending it.
+		defer incoming.Abort()
+	}
+
 	buf := make([]byte, proto.MaxFrame)
 	for {
 		if ctx.Err() != nil {
@@ -194,7 +209,7 @@ func (s *Server) handle(ctx context.Context, conn net.Conn) error {
 			}
 			return err
 		}
-		if err := s.dispatch(send, clip, frame); err != nil {
+		if err := s.dispatch(send, clip, incoming, frame); err != nil {
 			return err
 		}
 	}
@@ -313,7 +328,12 @@ func (s *Server) clearPairing() {
 	s.mu.Unlock()
 }
 
-func (s *Server) dispatch(send func(byte, []byte) error, clip *clipboardBridge, frame proto.Frame) error {
+func (s *Server) dispatch(
+	send func(byte, []byte) error,
+	clip *clipboardBridge,
+	incoming *transfer.Receiver,
+	frame proto.Frame,
+) error {
 	switch frame.Type {
 	case proto.TypeMouseMove:
 		m, err := proto.DecodeMouseMove(frame.Body)
@@ -369,6 +389,15 @@ func (s *Server) dispatch(send func(byte, []byte) error, clip *clipboardBridge, 
 		}
 		return nil
 
+	case proto.TypeFileBegin, proto.TypeFileChunk, proto.TypeFileEnd, proto.TypeFileAbort:
+		// A rejected file is the sender's problem, not a reason to drop the
+		// session: the user is still holding a mouse that has to keep working.
+		if err := s.receiveFile(incoming, frame); err != nil {
+			s.Log.Warn("file transfer failed", "err", err)
+			return send(proto.TypeFileAbort, []byte(err.Error()))
+		}
+		return nil
+
 	case proto.TypePing:
 		return send(proto.TypePong, frame.Body)
 
@@ -391,6 +420,41 @@ func writeFrame(conn net.Conn, typ byte, body []byte) error {
 		return err
 	}
 	return proto.WriteFrame(conn, typ, body)
+}
+
+// receiveFile applies one step of a transfer from the Mac.
+func (s *Server) receiveFile(incoming *transfer.Receiver, frame proto.Frame) error {
+	if incoming == nil {
+		return errors.New("this PC is not accepting files")
+	}
+	switch frame.Type {
+	case proto.TypeFileBegin:
+		begin, err := proto.DecodeFileBegin(frame.Body)
+		if err != nil {
+			return err
+		}
+		s.Log.Info("receiving a file", "name", begin.Name, "bytes", begin.Size)
+		return incoming.Begin(begin)
+
+	case proto.TypeFileChunk:
+		return incoming.Chunk(frame.Body)
+
+	case proto.TypeFileEnd:
+		path, err := incoming.End()
+		if err != nil {
+			return err
+		}
+		s.Log.Info("file received", "path", path)
+		if s.OnFileReceived != nil {
+			s.OnFileReceived(path, 0, 0)
+		}
+		return nil
+
+	default: // TypeFileAbort
+		incoming.Abort()
+		s.Log.Info("the Mac cancelled a file transfer")
+		return nil
+	}
 }
 
 func underlyingTCP(conn net.Conn) (*net.TCPConn, bool) {
