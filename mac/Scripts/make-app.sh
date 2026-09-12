@@ -51,10 +51,20 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
-# Ad-hoc signature: enough for a distinct TCC identity locally, but it changes
-# on every rebuild, so macOS asks for the permissions again each time. A real
-# Developer ID would stop that.
-codesign --force --sign - --timestamp=none "$APP" 2>/dev/null
+# Sign with the local identity if it is available, and fall back to ad-hoc.
+#
+# This matters more than it looks. macOS grants Accessibility and Input
+# Monitoring to a code identity, and an ad-hoc signature has none that is
+# stable — its hash changes on every build, so each rebuild silently revoked
+# both grants while System Settings still showed the switches as on.
+KEYCHAIN="$HOME/Library/Keychains/porthmoss-signing.keychain-db"
+if IDENTITY="$("$ROOT/Scripts/signing-identity.sh" 2>/dev/null)" && [ -n "$IDENTITY" ]; then
+    codesign --force --sign "$IDENTITY" --keychain "$KEYCHAIN" --timestamp=none "$APP"
+else
+    echo "warning: signing identity unavailable, falling back to ad-hoc;" >&2
+    echo "         macOS will ask for permissions again after every build." >&2
+    codesign --force --sign - --timestamp=none "$APP" 2>/dev/null
+fi
 
 # Finder caches icons aggressively and will happily show the old one forever.
 touch "$APP"

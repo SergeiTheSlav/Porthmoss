@@ -46,6 +46,16 @@ final class EventTap {
     }
 
     func start() throws {
+        // Accessibility alone is enough to *create* a tap, and that tap will
+        // deliver mouse events quite happily while never delivering a single
+        // keystroke: the keyboard is gated on Input Monitoring, separately.
+        // Checking only whether tapCreate succeeded leaves the user with a
+        // working mouse and a dead keyboard and no error to explain it.
+        if Permissions.inputMonitoring != .granted || Permissions.accessibility != .granted {
+            Permissions.request()
+            throw StartError.permissionDenied(Permissions.problem ?? "")
+        }
+
         let refcon = Unmanaged.passUnretained(self).toOpaque()
         guard let port = CGEvent.tapCreate(
             tap: .cghidEventTap,

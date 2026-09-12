@@ -147,8 +147,19 @@ Monitoring to see keystrokes at all; with only one, the tap fails to install.
 Run `Porthmoss.app`, not the bare binary — which is why `make` builds the
 bundle rather than leaving you an executable. macOS grants those permissions to
 a code identity rather than to a path, so a raw binary inherits whatever the
-terminal was granted. The ad-hoc signature changes on every rebuild, so
-macOS re-asks until this is signed with a real Developer ID.
+terminal was granted.
+
+`make app` signs with a self-signed identity created on first build, kept in
+its own keychain (`mac/Scripts/signing-identity.sh`). That is not decoration:
+an ad-hoc signature has no stable identity, so **every rebuild silently
+revoked both permissions** while System Settings still showed the switches as
+on. The two fail differently — Accessibility gates creating the tap, Input
+Monitoring gates whether it ever sees a keystroke — so the usual symptom was a
+working mouse and a dead keyboard, with no error at all. The signing identity
+pins the designated requirement to the certificate instead of the binary, so a
+grant made once survives every later build.
+
+To remove it: `security delete-keychain ~/Library/Keychains/porthmoss-signing.keychain-db`
 
 ## Known limitations
 
