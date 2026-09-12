@@ -6,6 +6,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"os"
@@ -17,6 +18,7 @@ import (
 	"github.com/janjamscikov/porthmoss/win/internal/discovery"
 	"github.com/janjamscikov/porthmoss/win/internal/inject"
 	"github.com/janjamscikov/porthmoss/win/internal/pairing"
+	"github.com/janjamscikov/porthmoss/win/internal/safe"
 	"github.com/janjamscikov/porthmoss/win/internal/server"
 	"github.com/janjamscikov/porthmoss/win/internal/ui"
 )
@@ -51,8 +53,6 @@ func run() error {
 	if *verbose {
 		level = slog.LevelDebug
 	}
-	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
-	quietMDNSLogging(*verbose)
 
 	stateDir := *stateIn
 	if stateDir == "" {
@@ -61,6 +61,21 @@ func run() error {
 			return err
 		}
 	}
+
+	// Log to a file as well as stderr. Built with -H windowsgui, the agent has
+	// no console, so anything printed to stderr goes nowhere and the program
+	// appears to "just close on its own". The file is where to look when it does.
+	logFile := openLogFile(stateDir)
+	if logFile != nil {
+		defer logFile.Close()
+	}
+	log := slog.New(slog.NewTextHandler(logWriter(logFile), &slog.HandlerOptions{Level: level}))
+	safe.Logger = log
+	quietMDNSLogging(*verbose)
+
+	// A panic on the main goroutine still ends the process, but now it says so
+	// in the log first rather than vanishing.
+	defer safe.Recover("main")
 	identity, err := pairing.Load(stateDir)
 	if err != nil {
 		return err
@@ -149,7 +164,10 @@ func run() error {
 	// The server runs in the background; the UI owns the main thread, because
 	// the Windows notification area insists on it.
 	errs := make(chan error, 1)
-	go func() { errs <- srv.Serve(ctx) }()
+	go func() {
+		defer safe.Recover("server")
+		errs <- srv.Serve(ctx)
+	}()
 
 	go func() {
 		if err := <-errs; err != nil {
@@ -260,6 +278,35 @@ func defaultDropDir() (string, error) {
 		return "", fmt.Errorf("locate home directory: %w", err)
 	}
 	return filepath.Join(home, "Downloads", "Porthmoss"), nil
+}
+
+// openLogFile opens (truncating) the log next to the agent's state. A failure
+// here is not worth aborting for: the agent runs fine without a log, it is just
+// harder to debug, so this returns nil and carries on.
+func openLogFile(stateDir string) *os.File {
+	if err := os.MkdirAll(stateDir, 0o700); err != nil {
+		return nil
+	}
+	// Truncate on launch: this is a "why did it die last time" record, not an
+	// archive, and an unbounded log on a long-running machine is its own bug.
+	f, err := os.OpenFile(filepath.Join(stateDir, "porthmoss.log"),
+		os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return nil
+	}
+	return f
+}
+
+// logWriter sends output to the file, and also to stderr when there is a
+// console to see it.
+func logWriter(f *os.File) io.Writer {
+	if f == nil {
+		return os.Stderr
+	}
+	if hasConsole() {
+		return io.MultiWriter(f, os.Stderr)
+	}
+	return f
 }
 
 func defaultStateDir() (string, error) {

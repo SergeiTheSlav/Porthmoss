@@ -312,7 +312,14 @@ func (w *Windows) Screens() (proto.ScreenInfo, error) {
 		},
 	}
 
-	callback := windows.NewCallback(func(hMonitor, hdc, lprc, data uintptr) uintptr {
+	callback := windows.NewCallback(func(hMonitor, hdc, lprc, data uintptr) (result uintptr) {
+		// Called from C once per display; a panic here cannot be allowed to
+		// unwind back across that boundary.
+		defer func() {
+			if recover() != nil {
+				result = 1 // keep enumerating
+			}
+		}()
 		mi := monitorInfo{cbSize: uint32(unsafe.Sizeof(monitorInfo{}))}
 		if ok, _, _ := procGetMonitorInfoW.Call(hMonitor, uintptr(unsafe.Pointer(&mi))); ok == 0 {
 			return 1 // skip this one, keep enumerating

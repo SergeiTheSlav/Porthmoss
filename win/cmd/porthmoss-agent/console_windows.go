@@ -15,7 +15,12 @@ import (
 // The agent is linked as a GUI binary so the tray app does not drag a black
 // console window behind it. That also means `--console` starts with no stdio
 // at all, which would silently swallow every message it is meant to print.
+// consoleAttached records whether attachConsole hooked up a real console,
+// so log output can be teed to stderr only when there is one to read it.
+var consoleAttached bool
+
 func attachConsole() {
+	consoleAttached = true
 	const attachParentProcess = ^uint32(0) // (DWORD)-1
 	kernel32 := windows.NewLazySystemDLL("kernel32.dll")
 	if err := kernel32.NewProc("AttachConsole").Find(); err != nil {
@@ -47,3 +52,6 @@ func quietMDNSLogging(verbose bool) {
 	}
 	log.SetOutput(io.Discard)
 }
+
+// hasConsole reports whether stderr goes anywhere a person can see.
+func hasConsole() bool { return consoleAttached }

@@ -25,6 +25,7 @@ var (
 	procGlobalFree   = kernel32.NewProc("GlobalFree")
 	procGlobalLock   = kernel32.NewProc("GlobalLock")
 	procGlobalUnlock = kernel32.NewProc("GlobalUnlock")
+	procGlobalSize   = kernel32.NewProc("GlobalSize")
 )
 
 const (
@@ -89,11 +90,35 @@ func (Windows) Text() (string, error) {
 	}
 	defer procGlobalUnlock.Call(handle)
 
-	text := windows.UTF16PtrToString(at[uint16](pointer))
-	if len(text) > MaxText {
+	// Read a bounded slice rather than walking to a null terminator with
+	// UTF16PtrToString. A clipboard buffer written by a misbehaving app may not
+	// be terminated, and walking past the allocation is an access violation
+	// that ends the process outright — no Go panic to recover from. GlobalSize
+	// gives the allocation length; anything oversized is refused before it is
+	// even decoded.
+	size, _, _ := procGlobalSize.Call(handle)
+	if size == 0 {
+		return "", nil
+	}
+	count := int(size) / 2 // bytes to UTF-16 code units
+	if count > MaxText {
 		return "", errors.New("clipboard contents too large to share")
 	}
-	return text, nil
+	units := unsafe.Slice(at[uint16](pointer), count)
+	// Stop at the terminator if there is one; otherwise take the whole buffer.
+	if i := indexZero(units); i >= 0 {
+		units = units[:i]
+	}
+	return windows.UTF16ToString(units), nil
+}
+
+func indexZero(units []uint16) int {
+	for i, u := range units {
+		if u == 0 {
+			return i
+		}
+	}
+	return -1
 }
 
 func (Windows) SetText(text string) error {

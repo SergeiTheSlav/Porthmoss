@@ -175,6 +175,17 @@ grant made once survives every later build.
 
 To remove it: `security delete-keychain ~/Library/Keychains/porthmoss-signing.keychain-db`
 
+## When the agent misbehaves
+
+The agent is a tray program with no console, so if it dies or refuses to do
+something, the reason is in its log rather than on screen:
+
+    %AppData%\Porthmoss\porthmoss.log
+
+It is rewritten each launch. A crash writes a recovered-panic line with a stack
+there before anything else. Running `porthmoss-agent.exe --console -v` also
+prints everything to the terminal live.
+
 ## Known limitations
 
 - Control flows one way: the Mac drives the PC, not the other way round. A

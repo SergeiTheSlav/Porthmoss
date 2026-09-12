@@ -12,6 +12,7 @@ import (
 	"unsafe"
 
 	"github.com/energye/systray"
+	"github.com/janjamscikov/porthmoss/win/internal/safe"
 	webview2 "github.com/jchv/go-webview2"
 	"golang.org/x/sys/windows"
 )
@@ -111,6 +112,9 @@ func (w *WindowsUI) Run() error {
 }
 
 func (w *WindowsUI) runWebView() {
+	// A panic here would otherwise cross the WebView2 message loop and take the
+	// whole agent with it.
+	defer safe.Recover("webview loop")
 	// The window and its message loop live and die on this one thread.
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
@@ -194,6 +198,9 @@ func (w *WindowsUI) runWebView() {
 func hideOnClose(hwnd uintptr) {
 	var previous uintptr
 	proc := syscall.NewCallback(func(hwnd, msg, wParam, lParam uintptr) uintptr {
+		// This runs for every window message. A panic must never leave it,
+		// because it is called from C and there is nothing above to catch it.
+		defer safe.Recover("wndproc")
 		if msg == wmClose {
 			procShowWindow.Call(hwnd, swHide)
 			return 0

@@ -14,3 +14,6 @@ func quietMDNSLogging(verbose bool) {
 		log.SetOutput(io.Discard)
 	}
 }
+
+// hasConsole: on a Mac (where this only builds for development) stderr is real.
+func hasConsole() bool { return true }

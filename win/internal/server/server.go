@@ -16,6 +16,7 @@ import (
 	"github.com/janjamscikov/porthmoss/win/internal/inject"
 	"github.com/janjamscikov/porthmoss/win/internal/pairing"
 	"github.com/janjamscikov/porthmoss/win/internal/proto"
+	"github.com/janjamscikov/porthmoss/win/internal/safe"
 	"github.com/janjamscikov/porthmoss/win/internal/transfer"
 )
 
@@ -111,6 +112,10 @@ func (s *Server) Serve(ctx context.Context) error {
 			continue
 		}
 		go func() {
+			// One controller's session must not be able to end the agent for
+			// everyone. A malformed frame or a bad injection panics here
+			// otherwise, and the whole process goes with it.
+			defer safe.Recover("session")
 			defer s.release()
 			defer conn.Close()
 			if err := s.handle(ctx, conn); err != nil && !errors.Is(err, io.EOF) {
@@ -194,7 +199,7 @@ func (s *Server) handle(ctx context.Context, conn net.Conn) error {
 			}
 			return nil
 		}
-		go clip.watch(sessionCtx, send, sendFiles)
+		safe.Go("clipboard watcher", func() { clip.watch(sessionCtx, send, sendFiles) })
 	}
 
 	var incoming *transfer.Receiver
