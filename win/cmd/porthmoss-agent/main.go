@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/janjamscikov/porthmoss/win/internal/clipboard"
 	"github.com/janjamscikov/porthmoss/win/internal/discovery"
 	"github.com/janjamscikov/porthmoss/win/internal/inject"
 	"github.com/janjamscikov/porthmoss/win/internal/pairing"
@@ -122,6 +123,7 @@ func run() error {
 		Addr:          net.JoinHostPort(*bind, strconv.Itoa(*port)),
 		Identity:      identity,
 		Injector:      injector,
+		Clipboard:     clipboard.New(),
 		Log:           log,
 		OnPairingCode: presenter.setCode,
 		OnListening:   presenter.setAddress,

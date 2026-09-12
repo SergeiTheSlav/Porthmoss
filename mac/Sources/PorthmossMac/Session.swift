@@ -13,7 +13,7 @@ import PorthmossCore
 final class Session: @unchecked Sendable {
     private let connection: AgentConnection
     private let model: CaptureModel
-    private let settings: Settings
+    private var settings: Settings
     private var tap: EventTap?
 
     private var displays: [Rect] = []
@@ -23,6 +23,7 @@ final class Session: @unchecked Sendable {
     private var scrollRemainderX = 0.0
     private var scrollRemainderY = 0.0
 
+    private var clipboard: ClipboardBridge?
     private var pingTimer: Timer?
     private var lastPongAt = Date()
     private var nextPingID: UInt64 = 1
@@ -59,11 +60,38 @@ final class Session: @unchecked Sendable {
         connection.onDisconnect = { [weak self] reason in
             DispatchQueue.main.async { self?.panic("connection lost: \(reason)") }
         }
+        let clipboard = ClipboardBridge { [weak self] text in
+            self?.connection.post(.clipboardText, Array(text.utf8))
+        }
+        connection.onClipboardText = { [weak self] text in
+            DispatchQueue.main.async { self?.clipboard?.applyRemote(text) }
+        }
+        clipboard.start()
+        self.clipboard = clipboard
+
         startHeartbeat()
         onStatus("Ready. Push the \(settings.capture.edge.rawValue) edge to take over the PC.")
     }
 
+    /// Takes new settings without tearing the link down.
+    ///
+    /// Everything here is applied on the Mac — which edge leads to the PC, how
+    /// hard to push, the modifier mapping — so there is nothing to renegotiate
+    /// with the agent and no reason to make the user reconnect.
+    func apply(_ new: Settings) {
+        // Changing the edge while the PC is being driven would leave the
+        // cursor with no way home that matches what the user just chose.
+        if new.capture.edge != settings.capture.edge, model.isRemote {
+            releaseControl(model.forceReturn(), announce: false)
+            onStatus("Settings applied — control returned to the Mac.")
+        }
+        settings = new
+        model.config = new.capture
+    }
+
     func stop() {
+        clipboard?.stop()
+        clipboard = nil
         pingTimer?.invalidate()
         if model.isRemote { releaseControl(model.forceReturn(), announce: false) }
         tap?.stop()

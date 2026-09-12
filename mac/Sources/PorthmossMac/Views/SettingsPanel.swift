@@ -28,13 +28,13 @@ struct SettingsPanel: View {
                         edgePicker
                         slider(
                             "Pointer speed on the PC",
-                            value: $model.settings.capture.sensitivity,
+                            value: $model.draft.capture.sensitivity,
                             range: 0.4 ... 2.5,
                             format: { String(format: "%.1f×", $0) }
                         )
                         slider(
                             "Push needed to cross",
-                            value: $model.settings.capture.pushThreshold,
+                            value: $model.draft.capture.pushThreshold,
                             range: 4 ... 40,
                             format: { "\(Int($0)) pt" },
                             caption: "Higher means less chance of crossing by accident."
@@ -56,7 +56,7 @@ struct SettingsPanel: View {
                         .toggleStyle(.switch)
                         .controlSize(.small)
 
-                        Toggle(isOn: $model.settings.invertScroll) {
+                        Toggle(isOn: $model.draft.invertScroll) {
                             Text("Invert scrolling on the PC")
                                 .font(.system(size: 11))
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -64,9 +64,24 @@ struct SettingsPanel: View {
                         .toggleStyle(.switch)
                         .controlSize(.small)
 
-                        Text("Changes apply the next time you connect.")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.tertiary)
+                        Divider().opacity(0.4)
+
+                        HStack {
+                            Text(model.hasUnappliedChanges
+                                 ? "Unapplied changes"
+                                 : "Up to date")
+                                .font(.system(size: 10))
+                                .foregroundStyle(model.hasUnappliedChanges ? .secondary : .tertiary)
+                            Spacer()
+                            Button("Revert") { model.discardSettingChanges() }
+                                .glassButtonStyle()
+                                .controlSize(.small)
+                                .disabled(!model.hasUnappliedChanges)
+                            Button("Apply") { model.applySettings() }
+                                .glassButtonStyle(prominent: true)
+                                .controlSize(.small)
+                                .disabled(!model.hasUnappliedChanges)
+                        }
                     }
                     .transition(.opacity.combined(with: .move(edge: .top)))
                 }
@@ -78,7 +93,7 @@ struct SettingsPanel: View {
         VStack(alignment: .leading, spacing: 5) {
             Text("The PC is beyond this edge")
                 .font(.system(size: 11))
-            Picker("", selection: $model.settings.capture.edge) {
+            Picker("", selection: $model.draft.capture.edge) {
                 ForEach(ScreenEdge.allCases, id: \.self) { edge in
                     Text(edge.rawValue.capitalized).tag(edge)
                 }
@@ -114,8 +129,8 @@ struct SettingsPanel: View {
     /// is which of the two presets is in play.
     private var commandIsControl: Binding<Bool> {
         Binding(
-            get: { model.settings.modifiers.command.code == 0x1D },
-            set: { model.settings.modifiers = $0 ? .default : .passthrough }
+            get: { model.draft.modifiers.command.code == 0x1D },
+            set: { model.draft.modifiers = $0 ? .default : .passthrough }
         )
     }
 }

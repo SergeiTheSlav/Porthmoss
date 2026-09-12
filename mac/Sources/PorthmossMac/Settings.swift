@@ -3,7 +3,7 @@ import PorthmossCore
 
 /// User-facing configuration, persisted as JSON so it stays hand-editable
 /// while there is no settings UI yet.
-struct Settings {
+struct Settings: Equatable {
     var agentHost = ""
     var agentPort: UInt16 = 47654
     var clientName = Host.current().localizedName ?? "Mac"

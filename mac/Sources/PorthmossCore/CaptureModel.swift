@@ -19,7 +19,7 @@ public enum ScreenEdge: String, Sendable, CaseIterable {
     case left, right, top, bottom
 }
 
-public struct CaptureConfig: Sendable {
+public struct CaptureConfig: Sendable, Equatable {
     /// The edge the Windows PC sits beyond.
     public var edge: ScreenEdge = .right
 

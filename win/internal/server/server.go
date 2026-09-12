@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/janjamscikov/porthmoss/win/internal/clipboard"
 	"github.com/janjamscikov/porthmoss/win/internal/inject"
 	"github.com/janjamscikov/porthmoss/win/internal/pairing"
 	"github.com/janjamscikov/porthmoss/win/internal/proto"
@@ -52,6 +53,9 @@ type Server struct {
 	// OnSession reports a Mac connecting and disconnecting, so the UI can
 	// show who is in control without polling.
 	OnSession func(connected bool, peer string)
+
+	// Clipboard, when set, is kept in step with the Mac's.
+	Clipboard clipboard.Clipboard
 
 	mu           sync.Mutex
 	busy         bool
@@ -158,6 +162,24 @@ func (s *Server) handle(ctx context.Context, conn net.Conn) error {
 		return fmt.Errorf("clearing handshake deadline: %w", err)
 	}
 
+	// The clipboard watcher and this loop both write to the socket, so every
+	// write goes through one place.
+	var writeMu sync.Mutex
+	send := func(typ byte, body []byte) error {
+		writeMu.Lock()
+		defer writeMu.Unlock()
+		return writeFrame(conn, typ, body)
+	}
+
+	sessionCtx, endSession := context.WithCancel(ctx)
+	defer endSession()
+
+	var clip *clipboardBridge
+	if s.Clipboard != nil {
+		clip = newClipboardBridge(s.Clipboard, s.Log)
+		go clip.watch(sessionCtx, send)
+	}
+
 	buf := make([]byte, proto.MaxFrame)
 	for {
 		if ctx.Err() != nil {
@@ -172,7 +194,7 @@ func (s *Server) handle(ctx context.Context, conn net.Conn) error {
 			}
 			return err
 		}
-		if err := s.dispatch(conn, frame); err != nil {
+		if err := s.dispatch(send, clip, frame); err != nil {
 			return err
 		}
 	}
@@ -291,7 +313,7 @@ func (s *Server) clearPairing() {
 	s.mu.Unlock()
 }
 
-func (s *Server) dispatch(conn net.Conn, frame proto.Frame) error {
+func (s *Server) dispatch(send func(byte, []byte) error, clip *clipboardBridge, frame proto.Frame) error {
 	switch frame.Type {
 	case proto.TypeMouseMove:
 		m, err := proto.DecodeMouseMove(frame.Body)
@@ -335,8 +357,20 @@ func (s *Server) dispatch(conn net.Conn, frame proto.Frame) error {
 		}
 		return s.Injector.MoveTo(m.X, m.Y)
 
+	case proto.TypeClipboardText:
+		if clip == nil {
+			return nil
+		}
+		s.Log.Debug("clipboard from the Mac", "bytes", len(frame.Body))
+		if err := clip.applyRemote(string(frame.Body)); err != nil {
+			// A clipboard another app is holding is a transient annoyance, not
+			// a reason to drop the user's session.
+			s.Log.Debug("could not set the clipboard", "err", err)
+		}
+		return nil
+
 	case proto.TypePing:
-		return writeFrame(conn, proto.TypePong, frame.Body)
+		return send(proto.TypePong, frame.Body)
 
 	case proto.TypePong:
 		return nil

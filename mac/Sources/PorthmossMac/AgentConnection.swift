@@ -28,6 +28,8 @@ final class AgentConnection: @unchecked Sendable {
 
     var onStateChange: @Sendable (State) -> Void = { _ in }
     var onDisconnect: @Sendable (String) -> Void = { _ in }
+    /// Text the PC copied.
+    var onClipboardText: @Sendable (String) -> Void = { _ in }
 
     private let host: String
     private let port: UInt16
@@ -290,9 +292,13 @@ final class AgentConnection: @unchecked Sendable {
             case let .failure(error):
                 self.onDisconnect(error.localizedDescription)
             case let .success(frame):
-                if frame.type == Wire.MessageType.pong.rawValue,
-                   let id = try? Wire.decodeU64(frame.body) {
-                    self.pendingPong(id)
+                switch frame.type {
+                case Wire.MessageType.pong.rawValue:
+                    if let id = try? Wire.decodeU64(frame.body) { self.pendingPong(id) }
+                case Wire.MessageType.clipboardText.rawValue:
+                    self.onClipboardText(String(decoding: frame.body, as: UTF8.self))
+                default:
+                    break
                 }
                 self.pump()
             }

@@ -81,12 +81,35 @@ final class AppModel: ObservableObject {
     /// the time we need to answer the blocked handshake.
     private var pendingPairing: PairingRequest?
 
-    @Published var settings: Settings {
-        didSet { try? settings.save() }
+    /// What the link is actually running with.
+    @Published private(set) var settings: Settings
+
+    /// What the settings panel is editing. Kept separate so a half-made change
+    /// — a slider mid-drag, an edge picked by mistake — does not take effect
+    /// under the user's hands, and so Apply has something to confirm.
+    @Published var draft: Settings
+
+    var hasUnappliedChanges: Bool { draft != settings }
+
+    /// Commits the staged settings to the running session. Nothing here is
+    /// negotiated with the agent, so this never needs a reconnection.
+    func applySettings() {
+        guard hasUnappliedChanges else { return }
+        settings = draft
+        try? settings.save()
+        session?.apply(settings)
+        statusLine = isConnected
+            ? "Settings applied."
+            : "Settings saved."
+    }
+
+    func discardSettingChanges() {
+        draft = settings
     }
 
     init(settings: Settings) {
         self.settings = settings
+        self.draft = settings
         saved = PairingStore.saved()
     }
 
@@ -135,15 +158,19 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func select(_ agent: Discovery.Agent) {
-        settings.agentHost = agent.host
-        settings.agentPort = agent.port
+    /// The address is not a staged setting — picking a PC is the action, not
+    /// something to confirm afterwards.
+    private func target(_ host: String, _ port: UInt16) {
+        settings.agentHost = host
+        settings.agentPort = port
+        draft.agentHost = host
+        draft.agentPort = port
+        try? settings.save()
     }
 
-    func select(_ pc: PairingStore.SavedPC) {
-        settings.agentHost = pc.host
-        settings.agentPort = pc.port
-    }
+    func select(_ agent: Discovery.Agent) { target(agent.host, agent.port) }
+
+    func select(_ pc: PairingStore.SavedPC) { target(pc.host, pc.port) }
 
     func forget(_ pc: PairingStore.SavedPC) {
         if settings.agentHost == pc.host { teardown() }
@@ -155,8 +182,7 @@ final class AppModel: ObservableObject {
 
     /// Connects to one specific PC rather than to whatever settings holds.
     func connect(to host: String, port: UInt16) {
-        settings.agentHost = Discovery.stripZone(host)
-        settings.agentPort = port
+        target(Discovery.stripZone(host), port)
         connect()
     }
 

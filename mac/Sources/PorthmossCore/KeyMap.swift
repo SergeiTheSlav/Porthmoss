@@ -18,7 +18,7 @@ public struct Scancode: Equatable, Sendable {
 /// keep working from muscle memory. Mac Control then has to go somewhere, and
 /// the Windows key is the natural home — it plays the same "system" role Cmd
 /// plays on macOS.
-public struct ModifierMapping: Sendable {
+public struct ModifierMapping: Sendable, Equatable {
     public var command: Scancode
     public var control: Scancode
     public var option: Scancode

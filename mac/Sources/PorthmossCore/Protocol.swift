@@ -4,7 +4,10 @@ import Foundation
 /// `docs/protocol.md`. Everything is big-endian.
 public enum Wire {
     public static let version: UInt16 = 1
-    public static let maxFrame = 4096
+    /// Generous because of the clipboard: input events are a few bytes each,
+    /// a pasted document is not, and chunking would buy nothing over a link
+    /// that already carries the whole thing in one write.
+    public static let maxFrame = 1 << 20
     public static let nonceSize = 32
     public static let macSize = 32
 
@@ -25,6 +28,9 @@ public enum Wire {
         case leave = 0x31
         case ping = 0x40
         case pong = 0x41
+
+        /// UTF-8 text, in either direction.
+        case clipboardText = 0x50
     }
 
     public enum MouseButton: UInt8 {

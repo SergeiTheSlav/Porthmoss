@@ -51,8 +51,12 @@ test: test-go test-mac
 test-cursor:
 	mac/Scripts/cursor-drift-test.sh
 
+# -unsafeptr is off for one documented case: the clipboard converts addresses
+# returned by Win32 into pointers. See internal/clipboard/clipboard_windows.go.
 test-go:
-	cd win && go test ./... && go vet ./... && GOOS=windows GOARCH=amd64 go vet ./...
+	cd win && go test ./... \
+	  && go vet -unsafeptr=false ./... \
+	  && GOOS=windows GOARCH=amd64 go vet -unsafeptr=false ./...
 
 # Needs the full Xcode toolchain: swift-testing's macros are not in the
 # Command Line Tools. See README, "Running the tests".

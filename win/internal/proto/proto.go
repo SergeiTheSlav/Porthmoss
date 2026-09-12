@@ -10,9 +10,13 @@ import (
 
 const (
 	Version   = 1
-	MaxFrame  = 4096
 	NonceSize = 32
 	MACSize   = 32
+
+	// MaxFrame is generous because of the clipboard. Input events are a few
+	// bytes each; a pasted document is not, and chunking it would buy nothing
+	// over a link that already carries the whole thing in one write.
+	MaxFrame = 1 << 20
 )
 
 // Message types.
@@ -33,6 +37,9 @@ const (
 	TypeLeave = 0x31
 	TypePing  = 0x40
 	TypePong  = 0x41
+
+	// TypeClipboardText carries UTF-8 text in either direction.
+	TypeClipboardText = 0x50
 )
 
 var ErrFrameTooLarge = errors.New("proto: frame exceeds maximum size")
