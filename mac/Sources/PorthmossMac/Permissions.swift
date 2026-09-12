@@ -52,9 +52,9 @@ enum Permissions {
         return """
         Porthmoss needs \(list) in System Settings › Privacy & Security.
 
-        If the switch is already on, turn it off and on again. Porthmoss is \
-        ad-hoc signed, so its signature changes every time it is rebuilt, and \
-        macOS quietly stops honouring a grant made to the previous build even \
+        If it is already listed there, select it, remove it with −, and add \
+        /Applications/Porthmoss.app again. macOS ties the grant to the app's \
+        signature, and will not honour one made to an earlier signature even \
         though the switch still looks enabled.
         """
     }

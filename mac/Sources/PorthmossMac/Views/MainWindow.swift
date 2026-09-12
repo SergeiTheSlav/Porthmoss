@@ -22,13 +22,20 @@ struct MainWindow: View {
             // this Mac can no longer authenticate to.
             if let recent = model.saved.first {
                 model.connect(to: recent.host, port: recent.port)
+            } else if !model.settings.agentHost.isEmpty {
+                model.connect()
             } else {
                 model.search()
             }
         }
-        .sheet(item: $model.pairingRequest) { request in
+        // onDismiss is the important half. Escape, or a click outside, clears
+        // the binding without going through Cancel — which left the handshake
+        // blocked on a code that could no longer be typed, the status stuck on
+        // "Pairing…", and no way to bring the sheet back.
+        .sheet(item: $model.pairingRequest, onDismiss: { model.cancelPairing() }) { request in
             PairingSheet(request: request)
                 .environmentObject(model)
+                .interactiveDismissDisabled()
         }
     }
 }

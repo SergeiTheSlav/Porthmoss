@@ -37,8 +37,17 @@ final class PairingRequest: @unchecked Sendable {
         return code
     }
 
-    /// Called from the UI. `nil` cancels the pairing.
+    private var answered = false
+    private let lock = NSLock()
+
+    /// Called from the UI. `nil` cancels the pairing. Safe to call more than
+    /// once: the sheet's dismissal handler answers as a backstop, and that
+    /// must not override or double-signal a real answer.
     func answer(_ code: String?) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !answered else { return }
+        answered = true
         self.code = code
         semaphore.signal()
     }
@@ -66,6 +75,11 @@ final class AppModel: ObservableObject {
     @Published private(set) var isControllingPC = false
     /// Non-nil while a pairing sheet should be on screen.
     @Published var pairingRequest: PairingRequest?
+
+    /// The same request, held separately. `.sheet(item:)` clears its binding
+    /// *before* calling onDismiss, so the published property is already nil by
+    /// the time we need to answer the blocked handshake.
+    private var pendingPairing: PairingRequest?
 
     @Published var settings: Settings {
         didSet { try? settings.save() }
@@ -179,6 +193,7 @@ final class AppModel: ObservableObject {
                 Task { @MainActor in
                     self?.state = .pairing(host)
                     self?.statusLine = "Enter the code shown on the PC."
+                    self?.pendingPairing = request
                     self?.pairingRequest = request
                 }
                 return request.wait()
@@ -194,6 +209,10 @@ final class AppModel: ObservableObject {
     private func finishConnecting(
         _ result: Result<(RemoteScreens, Data, Data), Error>, host: String
     ) {
+        // Answering is idempotent, and unblocks the handshake thread if it is
+        // somehow still parked on a code nobody is going to type.
+        pendingPairing?.answer(nil)
+        pendingPairing = nil
         pairingRequest = nil
         switch result {
         case let .failure(error):
@@ -278,12 +297,14 @@ final class AppModel: ObservableObject {
     }
 
     func submitPairingCode(_ code: String) {
-        pairingRequest?.answer(code)
+        pendingPairing?.answer(code)
+        pendingPairing = nil
         pairingRequest = nil
     }
 
     func cancelPairing() {
-        pairingRequest?.answer(nil)
+        pendingPairing?.answer(nil)
+        pendingPairing = nil
         pairingRequest = nil
     }
 
