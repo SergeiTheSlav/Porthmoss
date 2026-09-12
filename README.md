@@ -172,8 +172,10 @@ To remove it: `security delete-keychain ~/Library/Keychains/porthmoss-signing.ke
   fixes this without a driver.
 - **Anti-cheat-protected games reject injected input**, which is flagged
   `LLMHF_INJECTED`.
-- Input only flows Mac to PC. The PC's own mouse and keyboard cannot drive
-  the Mac; that needs low-level hooks on Windows and an injector on the Mac.
+- Input only flows Mac to PC in practice. The Mac can already *receive* and
+  apply input — see `MacInjector` and `make test-injector` — but nothing on
+  Windows captures it yet. `docs/reverse-control-windows.md` is the brief for
+  building that half.
 - Dragging files works from the Mac to the PC only. Windows gives no way to
   observe a drag starting in another application — the payload belongs to the
   source app — so the other direction goes through copy and paste instead.
