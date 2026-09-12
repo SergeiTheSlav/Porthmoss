@@ -52,8 +52,9 @@ struct PorthmossApp: App {
             // Filled while the PC is being driven, so the menu bar answers
             // "where is my keyboard going?" without opening anything.
             Image(systemName: model.isControllingPC
-                  ? "display.2.fill"
-                  : (model.isConnected ? "display.2" : "display"))
+                  ? "arrow.left.arrow.right.circle.fill"
+                  : (model.isConnected ? "arrow.left.arrow.right.circle"
+                                       : "arrow.left.arrow.right"))
         }
     }
 }

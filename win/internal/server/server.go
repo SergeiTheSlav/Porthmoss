@@ -94,7 +94,7 @@ func (s *Server) Serve(ctx context.Context) error {
 		}
 		if !s.claim() {
 			s.Log.Warn("rejecting second controller", "remote", conn.RemoteAddr())
-			proto.WriteFrame(conn, proto.TypeError, []byte("already controlled by another Mac"))
+			proto.WriteFrame(conn, proto.TypeError, []byte("Another Mac is already controlling this PC."))
 			conn.Close()
 			continue
 		}

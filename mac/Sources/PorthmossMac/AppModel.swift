@@ -119,6 +119,10 @@ final class AppModel: ObservableObject {
 
     func connect() {
         guard !state.isBusy, !isConnected else { return }
+        // Cancel anything still open first. Dropping the reference is not
+        // enough: the socket stays connected and keeps the agent's single
+        // controller slot, which then refuses every later attempt.
+        teardown()
         let host = settings.agentHost
         guard !host.isEmpty else {
             state = .failed("Pick a PC first, or type its address.")
@@ -164,6 +168,7 @@ final class AppModel: ObservableObject {
         case let .failure(error):
             state = .failed(describe(error))
             statusLine = ""
+            connection?.stop()
             connection = nil
 
         case let .success((screens, secret, fingerprint)):
@@ -183,9 +188,11 @@ final class AppModel: ObservableObject {
                 try session.start()
             } catch let error as EventTap.StartError {
                 state = .failed(error.description)
+                teardown()
                 return
             } catch {
                 state = .failed(error.localizedDescription)
+                teardown()
                 return
             }
             self.session = session
@@ -213,6 +220,10 @@ final class AppModel: ObservableObject {
     private func teardown() {
         session?.stop()
         session = nil
+        // Session.stop() cancels the connection when there is a session; when
+        // the handshake failed there is none, and this is the only thing that
+        // closes the socket.
+        connection?.stop()
         connection = nil
         isControllingPC = false
     }

@@ -43,8 +43,10 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleShortVersionString</key><string>0.1.0</string>
     <key>CFBundleVersion</key>         <string>1</string>
     <key>LSMinimumSystemVersion</key>  <string>14.0</string>
-    <!-- Menu bar app: no Dock icon. -->
-    <key>LSUIElement</key>             <true/>
+    <!-- A normal app: Dock icon, Cmd-Tab, and a Launchpad entry. It also
+         puts an item in the menu bar, but LSUIElement would have cost the
+         Dock icon and Cmd-Tab, which is a bad trade for a window you open. -->
+    <key>LSUIElement</key>             <false/>
 </dict>
 </plist>
 PLIST

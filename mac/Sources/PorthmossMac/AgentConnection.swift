@@ -182,8 +182,16 @@ final class AgentConnection: @unchecked Sendable {
             case let .failure(error):
                 completion(.failure(error))
             case let .success(frame):
+                // The agent refuses some connections outright — a second Mac,
+                // say — and says why. Reporting "expected CHALLENGE" instead
+                // of its message helps nobody.
+                if frame.type == Wire.MessageType.error.rawValue {
+                    return completion(.failure(WireError.rejected(
+                        String(decoding: frame.body, as: UTF8.self))))
+                }
                 guard frame.type == Wire.MessageType.challenge.rawValue else {
-                    return completion(.failure(WireError.rejected("expected CHALLENGE from agent")))
+                    return completion(.failure(WireError.rejected(
+                        "The PC sent an unexpected reply. Is it running a different version?")))
                 }
                 do {
                     let (nonce, needsPairing) = try Wire.decodeChallenge(frame.body)
