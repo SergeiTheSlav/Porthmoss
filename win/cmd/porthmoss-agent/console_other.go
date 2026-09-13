@@ -5,6 +5,7 @@ package main
 import (
 	"io"
 	"log"
+	"os"
 )
 
 func attachConsole() {}
@@ -17,3 +18,5 @@ func quietMDNSLogging(verbose bool) {
 
 // hasConsole: on a Mac (where this only builds for development) stderr is real.
 func hasConsole() bool { return true }
+
+func captureStderr(*os.File) {}

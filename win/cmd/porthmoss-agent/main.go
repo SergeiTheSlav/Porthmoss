@@ -11,6 +11,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"sync"
 
@@ -69,6 +70,10 @@ func run() error {
 	if logFile != nil {
 		defer logFile.Close()
 	}
+	// Send the runtime's own crash output to the log as well. This is what
+	// captures the faults slog never sees.
+	captureStderr(logFile)
+	debug.SetTraceback("all")
 	log := slog.New(slog.NewTextHandler(logWriter(logFile), &slog.HandlerOptions{Level: level}))
 	safe.Logger = log
 	quietMDNSLogging(*verbose)
@@ -287,10 +292,12 @@ func openLogFile(stateDir string) *os.File {
 	if err := os.MkdirAll(stateDir, 0o700); err != nil {
 		return nil
 	}
-	// Truncate on launch: this is a "why did it die last time" record, not an
-	// archive, and an unbounded log on a long-running machine is its own bug.
-	f, err := os.OpenFile(filepath.Join(stateDir, "porthmoss.log"),
-		os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	// Keep the previous run's log before starting a fresh one. When the agent
+	// dies and is relaunched, the crash is in the *previous* run — truncating
+	// on every start would erase exactly the thing worth reading.
+	path := filepath.Join(stateDir, "porthmoss.log")
+	os.Rename(path, path+".1")
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return nil
 	}

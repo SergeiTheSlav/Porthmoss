@@ -55,3 +55,20 @@ func quietMDNSLogging(verbose bool) {
 
 // hasConsole reports whether stderr goes anywhere a person can see.
 func hasConsole() bool { return consoleAttached }
+
+// captureStderr points the process's real stderr at the log file.
+//
+// A Go runtime fatal — an access violation from a bad syscall, or a panic on a
+// goroutine we did not guard — is written to os.Stderr directly, not through
+// slog. In a -H windowsgui build that stderr is not connected to anything, so
+// those messages are exactly the ones that were lost when the agent "closed
+// for no reason". Redirecting the OS handle means the runtime writes its crash
+// into porthmoss.log too. Best-effort: a failure here changes nothing that
+// worked before.
+func captureStderr(f *os.File) {
+	if f == nil || consoleAttached {
+		return // a console is already showing stderr; leave it be
+	}
+	windows.SetStdHandle(windows.STD_ERROR_HANDLE, windows.Handle(f.Fd()))
+	os.Stderr = f
+}
