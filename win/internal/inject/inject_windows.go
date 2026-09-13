@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"sync"
 	"unsafe"
 
 	"github.com/janjamscikov/porthmoss/win/internal/proto"
@@ -90,6 +91,13 @@ type Windows struct {
 	// coordinates. Movement is applied as the difference from it, so the PC's
 	// own mouse is never undone.
 	lastX, lastY uint16
+
+	// The monitor-enumeration callback is created once and kept, because
+	// syscall.NewCallback never frees what it hands out.
+	enumOnce     sync.Once
+	enumCallback uintptr
+	enumMu       sync.Mutex
+	enumMonitors []proto.Monitor
 }
 
 func New() (*Windows, error) {
@@ -155,11 +163,12 @@ func (w *Windows) EnterAt(x, y uint16) error {
 // teleports. Taking the difference instead lets both mice move one cursor,
 // with neither cancelling the other.
 func (w *Windows) MoveTo(x, y uint16) error {
-	screens, err := w.Screens()
-	if err != nil {
-		return err
-	}
-	virtual := screens.Virtual
+	// Only the virtual-desktop rectangle is needed here, and it comes from
+	// GetSystemMetrics with no callback. Calling Screens() on every movement
+	// was fatal: it allocates a syscall callback each time, and those come
+	// from a fixed pool that is never freed — a few thousand mouse moves and
+	// the process dies with "too many callback functions".
+	virtual := w.virtualBounds()
 
 	deltaX := (float64(x) - float64(w.lastX)) / 65535 * float64(virtual.Width-1)
 	deltaY := (float64(y) - float64(w.lastY)) / 65535 * float64(virtual.Height-1)
@@ -302,44 +311,59 @@ type monitorInfo struct {
 	dwFlags   uint32
 }
 
-func (w *Windows) Screens() (proto.ScreenInfo, error) {
-	info := proto.ScreenInfo{
-		Virtual: proto.Monitor{
-			Left:   int32(systemMetric(smXVirtualScreen)),
-			Top:    int32(systemMetric(smYVirtualScreen)),
-			Width:  int32(systemMetric(smCXVirtualScreen)),
-			Height: int32(systemMetric(smCYVirtualScreen)),
-		},
+// virtualBounds is the whole virtual desktop, read without any callback.
+func (w *Windows) virtualBounds() proto.Monitor {
+	return proto.Monitor{
+		Left:   int32(systemMetric(smXVirtualScreen)),
+		Top:    int32(systemMetric(smYVirtualScreen)),
+		Width:  int32(systemMetric(smCXVirtualScreen)),
+		Height: int32(systemMetric(smCYVirtualScreen)),
 	}
+}
 
-	callback := windows.NewCallback(func(hMonitor, hdc, lprc, data uintptr) (result uintptr) {
-		// Called from C once per display; a panic here cannot be allowed to
-		// unwind back across that boundary.
-		defer func() {
-			if recover() != nil {
-				result = 1 // keep enumerating
+func (w *Windows) Screens() (proto.ScreenInfo, error) {
+	// The enumeration callback is created once and reused. syscall.NewCallback
+	// draws from a pool that is never reclaimed, so making a fresh one per call
+	// is a slow leak that eventually kills the process.
+	w.enumOnce.Do(func() {
+		w.enumCallback = windows.NewCallback(func(hMonitor, hdc, lprc, data uintptr) (result uintptr) {
+			// Called from C once per display; a panic must not unwind into C.
+			defer func() {
+				if recover() != nil {
+					result = 1 // keep enumerating
+				}
+			}()
+			mi := monitorInfo{cbSize: uint32(unsafe.Sizeof(monitorInfo{}))}
+			if ok, _, _ := procGetMonitorInfoW.Call(hMonitor, uintptr(unsafe.Pointer(&mi))); ok == 0 {
+				return 1 // skip this one, keep enumerating
 			}
-		}()
-		mi := monitorInfo{cbSize: uint32(unsafe.Sizeof(monitorInfo{}))}
-		if ok, _, _ := procGetMonitorInfoW.Call(hMonitor, uintptr(unsafe.Pointer(&mi))); ok == 0 {
-			return 1 // skip this one, keep enumerating
-		}
-		info.Monitors = append(info.Monitors, proto.Monitor{
-			Left:    mi.rcMonitor.left,
-			Top:     mi.rcMonitor.top,
-			Width:   mi.rcMonitor.right - mi.rcMonitor.left,
-			Height:  mi.rcMonitor.bottom - mi.rcMonitor.top,
-			Primary: mi.dwFlags&monitorinfofPrimary != 0,
+			w.enumMonitors = append(w.enumMonitors, proto.Monitor{
+				Left:    mi.rcMonitor.left,
+				Top:     mi.rcMonitor.top,
+				Width:   mi.rcMonitor.right - mi.rcMonitor.left,
+				Height:  mi.rcMonitor.bottom - mi.rcMonitor.top,
+				Primary: mi.dwFlags&monitorinfofPrimary != 0,
+			})
+			return 1
 		})
-		return 1
 	})
-	if ok, _, err := procEnumDisplayMonitors.Call(0, 0, callback, 0); ok == 0 {
+
+	// The callback writes into a field, so only one enumeration may run at a
+	// time. Screens() is called from the handshake; serialising it is cheap.
+	w.enumMu.Lock()
+	defer w.enumMu.Unlock()
+	w.enumMonitors = w.enumMonitors[:0]
+
+	if ok, _, err := procEnumDisplayMonitors.Call(0, 0, w.enumCallback, 0); ok == 0 {
 		return proto.ScreenInfo{}, fmt.Errorf("EnumDisplayMonitors: %w", err)
 	}
+
+	info := proto.ScreenInfo{Virtual: w.virtualBounds()}
 	if info.Virtual.Width <= 0 || info.Virtual.Height <= 0 {
 		return proto.ScreenInfo{}, fmt.Errorf("inject: implausible virtual desktop %dx%d",
 			info.Virtual.Width, info.Virtual.Height)
 	}
+	info.Monitors = append([]proto.Monitor(nil), w.enumMonitors...)
 	return info, nil
 }
 
