@@ -13,3 +13,7 @@ func openFolder(dir string) error {
 	}
 	return exec.Command("open", dir).Start()
 }
+
+func openInBrowser(url string) error {
+	return exec.Command("open", url).Start()
+}

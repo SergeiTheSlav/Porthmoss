@@ -15,9 +15,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO="$(cd "$ROOT/.." && pwd)"
 # Read the version from the one place it is written down.
-VERSION="$(grep -A1 CFBundleShortVersionString "$ROOT/Scripts/make-app.sh" \
-    | grep -o '<string>[^<]*</string>' | head -1 | sed 's/<[^>]*>//g')"
-VERSION="${VERSION:-0.1.0}"
+VERSION="$(sed -n 's/.*static let version = "\([^"]*\)".*/\1/p' \
+    "$ROOT/Sources/PorthmossCore/About.swift" | head -1)"
+[ -n "$VERSION" ] || { echo "could not read the version from About.swift" >&2; exit 1; }
 DMG="$REPO/dist/Porthmoss-$VERSION.dmg"
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
@@ -115,6 +115,11 @@ far edge to come home, or press Control-Option-Command-P at any time.
 Which edge leads to the PC is in Settings, along with pointer speed and how
 hard the push has to be.
 
+With two screens attached, Settings also asks WHICH screen's edge leads to
+the PC. By default any edge with nothing of the Mac's own beyond it will do,
+which is ambiguous as soon as two screens both have a free edge on the same
+side — so pick one by name and there is exactly one way across.
+
   * Cmd becomes Ctrl on the PC, so Cmd-C and Cmd-T keep working.
   * Copy and paste crosses over, text and files both ways.
   * Drag files from the Mac onto the PC and they land in Downloads\Porthmoss.
@@ -122,6 +127,18 @@ hard the push has to be.
 
 Windows will not let anything drive UAC prompts or the lock screen. That is
 a Windows rule, not a missing feature.
+
+
+About
+-----
+
+Porthmoss is free and open source, under the MIT licence.
+Made by Jan Jamscikov. Source, issues and newer versions:
+
+  https://github.com/SergeiTheSlav/Porthmoss
+
+The About panel in the Mac app and the About card in the PC window list
+everything this is built on, and under which licence.
 README
 
 echo "Making the disk image…"

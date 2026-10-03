@@ -11,8 +11,8 @@ import (
 	"syscall"
 	"unsafe"
 
+	"github.com/SergeiTheSlav/Porthmoss/win/internal/safe"
 	"github.com/energye/systray"
-	"github.com/janjamscikov/porthmoss/win/internal/safe"
 	webview2 "github.com/jchv/go-webview2"
 	"golang.org/x/sys/windows"
 )
@@ -150,6 +150,11 @@ func (w *WindowsUI) runWebView() {
 		}
 	})
 	_ = view.Bind("hideWindow", func() { w.Hide() })
+	_ = view.Bind("openLink", func(url string) {
+		if w.opts.OnOpenLink != nil {
+			w.opts.OnOpenLink(url)
+		}
+	})
 	_ = view.Bind("openDropFolder", func() {
 		if w.opts.OnOpenDropFolder != nil {
 			w.opts.OnOpenDropFolder()

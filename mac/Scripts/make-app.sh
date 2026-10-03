@@ -19,6 +19,12 @@ APP="${APP_OUT:-$REPO/dist/Porthmoss.app}"
 
 [ -x "$BINARY" ] || { echo "build first: (cd mac && swift build -c $CONFIG)" >&2; exit 1; }
 
+# The version is declared in the source, so the app, the About panel and the
+# --version flag can never disagree about which build this is.
+VERSION="$(sed -n 's/.*static let version = "\([^"]*\)".*/\1/p' \
+    "$ROOT/Sources/PorthmossCore/About.swift" | head -1)"
+[ -n "$VERSION" ] || { echo "could not read the version from About.swift" >&2; exit 1; }
+
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BINARY" "$APP/Contents/MacOS/Porthmoss"
@@ -32,7 +38,7 @@ swiftc -swift-version 5 -O "$ROOT/Scripts/make-icon.swift" -o "$ICONGEN"
 "$ICONGEN" "$ICONSET" > /dev/null
 iconutil --convert icns --output "$APP/Contents/Resources/Porthmoss.icns" "$ICONSET"
 
-cat > "$APP/Contents/Info.plist" <<'PLIST'
+cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -43,7 +49,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleExecutable</key>      <string>Porthmoss</string>
     <key>CFBundleIconFile</key>        <string>Porthmoss</string>
     <key>CFBundlePackageType</key>     <string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.1.0</string>
+    <key>CFBundleShortVersionString</key><string>$VERSION</string>
     <key>CFBundleVersion</key>         <string>1</string>
     <key>LSMinimumSystemVersion</key>  <string>14.0</string>
     <!-- A normal app: Dock icon, Cmd-Tab, and a Launchpad entry. It also

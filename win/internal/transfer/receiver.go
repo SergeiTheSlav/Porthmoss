@@ -10,7 +10,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/janjamscikov/porthmoss/win/internal/proto"
+	"github.com/SergeiTheSlav/Porthmoss/win/internal/proto"
 )
 
 // Receiver writes incoming files into a directory, one at a time.

@@ -12,12 +12,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/janjamscikov/porthmoss/win/internal/clipboard"
-	"github.com/janjamscikov/porthmoss/win/internal/inject"
-	"github.com/janjamscikov/porthmoss/win/internal/pairing"
-	"github.com/janjamscikov/porthmoss/win/internal/proto"
-	"github.com/janjamscikov/porthmoss/win/internal/safe"
-	"github.com/janjamscikov/porthmoss/win/internal/transfer"
+	"github.com/SergeiTheSlav/Porthmoss/win/internal/clipboard"
+	"github.com/SergeiTheSlav/Porthmoss/win/internal/inject"
+	"github.com/SergeiTheSlav/Porthmoss/win/internal/pairing"
+	"github.com/SergeiTheSlav/Porthmoss/win/internal/proto"
+	"github.com/SergeiTheSlav/Porthmoss/win/internal/safe"
+	"github.com/SergeiTheSlav/Porthmoss/win/internal/transfer"
 )
 
 const (

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/janjamscikov/porthmoss/win/internal/proto"
+	"github.com/SergeiTheSlav/Porthmoss/win/internal/proto"
 )
 
 // Fake records input instead of delivering it. It backs the agent on non-Windows

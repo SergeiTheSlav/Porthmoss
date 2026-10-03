@@ -18,6 +18,7 @@ enum CLI {
         var args = Array(CommandLine.arguments.dropFirst())
         var shouldUnpair = false
         var discoverOnly = false
+        var listDisplays = false
 
         func usage() -> Never {
             print("""
@@ -30,12 +31,16 @@ enum CLI {
               --host <addr>        agent address (default: discover on the network)
               --port <n>           agent port (default: \(settings.agentPort))
               --edge <side>        which edge leads to the PC: left|right|top|bottom
+              --display <name>     which screen's edge leads to the PC, by name
+                                   or id (default: whichever is on the outside)
+              --displays           list this Mac's screens and exit
               --sensitivity <n>    mouse scaling on the PC (default: \(settings.capture.sensitivity))
               --push <points>      how hard to push through the edge (default: \(Int(settings.capture.pushThreshold)))
               --passthrough        keep Mac Ctrl as Windows Ctrl (default: Cmd becomes Ctrl)
               --invert-scroll      flip scroll direction on the PC
               --discover           list agents on the network and exit
               --unpair             forget the stored pairing and exit
+              --version            print the version and licence and exit
               --save               write the current options to \(Settings.fileURL.path)
               -h, --help           this message
 
@@ -65,6 +70,26 @@ enum CLI {
                     exit(2)
                 }
                 settings.capture.edge = edge
+            case "--display":
+                let wanted = value(arg)
+                // Match on id first — that is what the settings file holds —
+                // then on name, case-insensitively, so "studio" is enough.
+                let displays = Displays.all()
+                guard let display = displays.first(where: { $0.id == wanted })
+                        ?? displays.first(where: {
+                            $0.name.lowercased().contains(wanted.lowercased())
+                        })
+                else {
+                    let names = displays.map(\.name).joined(separator: ", ")
+                    FileHandle.standardError.write(Data(
+                        "porthmoss: no screen matching '\(wanted)'. Connected: \(names)\n".utf8))
+                    exit(2)
+                }
+                settings.crossingDisplay = display.id
+            case "--displays": listDisplays = true
+            case "--version":
+                print(About.summary)
+                exit(0)
             case "--sensitivity": settings.capture.sensitivity = Double(value(arg)) ?? settings.capture.sensitivity
             case "--push": settings.capture.pushThreshold = Double(value(arg)) ?? settings.capture.pushThreshold
             case "--passthrough": settings.modifiers = .passthrough
@@ -80,6 +105,29 @@ enum CLI {
                 FileHandle.standardError.write(Data("porthmoss: unknown option '\(arg)'\n".utf8))
                 exit(2)
             }
+        }
+
+        if listDisplays {
+            let displays = Displays.all()
+            for display in displays {
+                let free = ScreenEdge.allCases
+                    .filter { Displays.isFree(display, edge: $0, among: displays) }
+                    .map(\.rawValue)
+                let size = "\(Int(display.frame.width))×\(Int(display.frame.height))"
+                let origin = "\(Int(display.frame.x)),\(Int(display.frame.y))"
+                print("""
+                \(display.name)\(display.isMain ? " (main)" : "")
+                  id          \(display.id)
+                  frame       \(size) at \(origin)
+                  free edges  \(free.isEmpty ? "none" : free.joined(separator: ", "))
+                """)
+            }
+            print("")
+            print("Pass --display <name> to pick one. An edge that is not free")
+            print("has another of this Mac's screens beyond it: crossing there")
+            print("still works, but it costs the ordinary way of reaching that")
+            print("screen — a pause mid-push lets the pointer through instead.")
+            exit(0)
         }
 
         if shouldSave {

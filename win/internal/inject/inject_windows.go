@@ -7,7 +7,7 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/janjamscikov/porthmoss/win/internal/proto"
+	"github.com/SergeiTheSlav/Porthmoss/win/internal/proto"
 	"golang.org/x/sys/windows"
 )
 

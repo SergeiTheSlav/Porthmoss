@@ -129,6 +129,7 @@ button:disabled { opacity: 0.4; }
 /* The wordmark, set the way the Mac app sets it: quiet, letterspaced, and
    half-transparent so it reads as a mark rather than as another control. */
 .wordmark {
+  cursor: default;
   text-align: center;
   font-family: "Sitka Text", Georgia, "Times New Roman", serif;
   font-size: 17px;
@@ -138,8 +139,20 @@ button:disabled { opacity: 0.4; }
   color: var(--text);
   opacity: 0.35;
   padding: 4px 0 10px;
+  transition: opacity 0.15s ease;
 }
+.wordmark:hover { opacity: 0.6; }
 .footnote { color: var(--text-tertiary); font-size: 12px; margin-top: 10px; }
+
+/* Credits. Out of the way until the wordmark is clicked: nobody opens the
+   agent to read them, but an open-source project that does not say whose it
+   is, what licence it carries, or whose work it stands on is missing
+   something. The Mac app puts them in the same place. */
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.credit { padding: 5px 0; font-size: 13px; }
+.credit + .credit { border-top: 1px solid var(--stroke); }
+.credit .role { color: var(--text-secondary); font-size: 12px; }
 </style>
 
 <h1>Porthmoss</h1>
@@ -189,7 +202,21 @@ button:disabled { opacity: 0.4; }
   </div>
 </div>
 
-<div class="wordmark">πορθμόςς</div>
+<div class="wordmark" id="wordmark" title="About Porthmoss">πορθμόςς</div>
+
+<div class="card hidden" id="about-card">
+  <h2>About <span id="about-version" style="font-weight:400;opacity:0.7"></span></h2>
+  <div class="row"><span class="k">Version</span><span class="v" id="ab-version">—</span></div>
+  <div class="row"><span class="k">Made by</span><span class="v" id="ab-author">—</span></div>
+  <div class="row"><span class="k">Licence</span><span class="v" id="ab-licence">—</span></div>
+  <div class="row"><span class="k">Source</span><span class="v"><a id="ab-repo" href="#">—</a></span></div>
+  <h2 style="margin:14px 0 4px">Standing on</h2>
+  <div id="ab-credits"></div>
+  <div class="footnote">
+    The Mac app has no third-party dependencies of its own; these are what
+    this agent is built on.
+  </div>
+</div>
 
 <script>
 function render(s) {
@@ -207,10 +234,51 @@ function render(s) {
   el("last-file").textContent = s.lastFile || "—";
   el("drop-dir").textContent = s.dropDir || "";
   el("file-card").classList.toggle("hidden", !s.lastFile);
+  renderAbout(s.about);
+}
+
+// The credits are constant, so this only has to run once.
+let aboutDone = false;
+function renderAbout(about) {
+  if (!about || aboutDone) return;
+  aboutDone = true;
+  const el = (id) => document.getElementById(id);
+  el("about-version").textContent = about.version || "";
+  el("ab-version").textContent = about.version || "—";
+  el("ab-author").textContent = about.author || "—";
+  el("ab-licence").textContent = [about.licence, about.copyright]
+    .filter(Boolean).join(" · ") || "—";
+  const repo = el("ab-repo");
+  repo.textContent = (about.repository || "").replace(/^https:\/\//, "") || "—";
+  repo.href = about.repository || "#";
+  const list = el("ab-credits");
+  list.textContent = "";
+  for (const credit of about.credits || []) {
+    const row = document.createElement("div");
+    row.className = "credit";
+    const link = document.createElement("a");
+    link.href = credit.url;
+    link.textContent = credit.name;
+    const role = document.createElement("div");
+    role.className = "role";
+    role.textContent = credit.role + " · " + credit.licence;
+    row.append(link, role);
+    list.append(row);
+  }
 }
 document.getElementById("unpair").onclick = () => window.unpair();
 document.getElementById("hide").onclick = () => window.hideWindow();
 document.getElementById("open-folder").onclick = () => window.openDropFolder();
+document.getElementById("wordmark").onclick = () =>
+  document.getElementById("about-card").classList.toggle("hidden");
+// Every external link goes to the user's browser. This window has no back
+// button, so navigating it to a web page would strand them on it.
+document.addEventListener("click", (event) => {
+  const link = event.target.closest && event.target.closest('a[href^="https://"]');
+  if (!link) return;
+  event.preventDefault();
+  if (window.openLink) window.openLink(link.href);
+});
 // Go pushes state in by calling window.applyState(...).
 window.applyState = render;
 window.addEventListener("DOMContentLoaded", () => window.ready && window.ready());

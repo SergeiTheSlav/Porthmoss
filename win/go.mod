@@ -1,4 +1,4 @@
-module github.com/janjamscikov/porthmoss/win
+module github.com/SergeiTheSlav/Porthmoss/win
 
 go 1.26.0
 

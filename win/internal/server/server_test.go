@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/janjamscikov/porthmoss/win/internal/inject"
-	"github.com/janjamscikov/porthmoss/win/internal/pairing"
-	"github.com/janjamscikov/porthmoss/win/internal/proto"
+	"github.com/SergeiTheSlav/Porthmoss/win/internal/inject"
+	"github.com/SergeiTheSlav/Porthmoss/win/internal/pairing"
+	"github.com/SergeiTheSlav/Porthmoss/win/internal/proto"
 )
 
 // testRig starts a real TLS agent on a loopback port with a recording injector.

@@ -6,6 +6,8 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+
+	"github.com/SergeiTheSlav/Porthmoss/win/internal/about"
 )
 
 // Console is the no-window front end: what `--console` selects, what runs on
@@ -17,7 +19,10 @@ type Console struct {
 	once sync.Once
 }
 
-func NewConsole() *Console { return &Console{done: make(chan struct{})} }
+func NewConsole() *Console {
+	fmt.Println(about.Summary)
+	return &Console{done: make(chan struct{})}
+}
 
 func (c *Console) Update(state State) {
 	c.mu.Lock()

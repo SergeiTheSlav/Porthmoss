@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/janjamscikov/porthmoss/win/internal/proto"
+	"github.com/SergeiTheSlav/Porthmoss/win/internal/proto"
 )
 
 // TestSafeNameCannotEscape states the property that actually matters: whatever

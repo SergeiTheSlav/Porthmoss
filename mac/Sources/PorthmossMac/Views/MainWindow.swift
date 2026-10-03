@@ -40,20 +40,39 @@ struct MainWindow: View {
     }
 }
 
-/// The wordmark. πορθμός is Greek for a strait — the narrow water between two
-/// shores. The doubled final sigma is deliberate: it mirrors the doubled s in
-/// Porthmoss, so the mark and the product name end the same way. Set quietly,
-/// in half-transparent grey, so it reads as a mark rather than as another
-/// piece of the interface.
+/// The wordmark, and the way to the credits.
+///
+/// πορθμός is Greek for a strait — the narrow water between two shores. The
+/// doubled final sigma is deliberate: it mirrors the doubled s in Porthmoss,
+/// so the mark and the product name end the same way. Set quietly, in
+/// half-transparent grey, so it reads as a mark rather than as another piece
+/// of the interface.
+///
+/// Clicking it opens the credits. That is where a wordmark leads in most Mac
+/// apps, and it keeps a panel nobody opens twice out of a window that is
+/// otherwise all things you came here to do.
 private struct Logotype: View {
+    @State private var showingAbout = false
+    @State private var hovering = false
+
     var body: some View {
-        Text("πορθμόςς")
-            .font(.system(size: 17, weight: .light, design: .serif))
-            .tracking(4)
-            .foregroundStyle(Color.gray.opacity(0.5))
-            .frame(maxWidth: .infinity)
-            .padding(.top, 2)
-            .accessibilityHidden(true)
+        Button {
+            showingAbout = true
+        } label: {
+            Text("πορθμόςς")
+                .font(.system(size: 17, weight: .light, design: .serif))
+                .tracking(4)
+                .foregroundStyle(Color.gray.opacity(hovering ? 0.8 : 0.5))
+                .frame(maxWidth: .infinity)
+                .padding(.top, 2)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help("About Porthmoss")
+        .popover(isPresented: $showingAbout, arrowEdge: .top) {
+            AboutView()
+        }
     }
 }
 
@@ -323,10 +342,7 @@ private struct CrossingPanel: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Crossing over")
                     .font(.system(size: 12, weight: .semibold))
-                Label(
-                    "Push the \(model.settings.capture.edge.rawValue) edge of your screen to take over the PC.",
-                    systemImage: "arrow.right.to.line"
-                )
+                Label(crossingHint, systemImage: "arrow.right.to.line")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 Label(
@@ -337,5 +353,18 @@ private struct CrossingPanel: View {
                 .foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// With two screens attached, "push the right edge" does not say which
+    /// right edge — so name the screen whenever there is a choice to be made.
+    private var crossingHint: String {
+        let edge = model.settings.capture.edge.rawValue
+        if let display = model.displays.first(where: { $0.id == model.settings.crossingDisplay }) {
+            return "Push the \(edge) edge of \(display.name) to take over the PC."
+        }
+        if model.displays.count > 1 {
+            return "Push the \(edge) edge of your outermost screen to take over the PC."
+        }
+        return "Push the \(edge) edge of your screen to take over the PC."
     }
 }

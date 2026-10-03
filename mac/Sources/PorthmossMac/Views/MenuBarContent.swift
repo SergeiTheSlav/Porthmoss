@@ -1,3 +1,4 @@
+import PorthmossCore
 import SwiftUI
 
 /// The menu bar dropdown. Deliberately thin: status, the one action that
@@ -28,6 +29,9 @@ struct MenuBarContent: View {
             .keyboardShortcut(",", modifiers: .command)
 
         Divider()
+
+        Link("\(About.name) \(About.version) — source on GitHub",
+             destination: URL(string: About.repository)!)
 
         Button("Quit Porthmoss") { NSApplication.shared.terminate(nil) }
             .keyboardShortcut("q", modifiers: .command)

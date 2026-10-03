@@ -15,13 +15,14 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/janjamscikov/porthmoss/win/internal/clipboard"
-	"github.com/janjamscikov/porthmoss/win/internal/discovery"
-	"github.com/janjamscikov/porthmoss/win/internal/inject"
-	"github.com/janjamscikov/porthmoss/win/internal/pairing"
-	"github.com/janjamscikov/porthmoss/win/internal/safe"
-	"github.com/janjamscikov/porthmoss/win/internal/server"
-	"github.com/janjamscikov/porthmoss/win/internal/ui"
+	"github.com/SergeiTheSlav/Porthmoss/win/internal/about"
+	"github.com/SergeiTheSlav/Porthmoss/win/internal/clipboard"
+	"github.com/SergeiTheSlav/Porthmoss/win/internal/discovery"
+	"github.com/SergeiTheSlav/Porthmoss/win/internal/inject"
+	"github.com/SergeiTheSlav/Porthmoss/win/internal/pairing"
+	"github.com/SergeiTheSlav/Porthmoss/win/internal/safe"
+	"github.com/SergeiTheSlav/Porthmoss/win/internal/server"
+	"github.com/SergeiTheSlav/Porthmoss/win/internal/ui"
 )
 
 func main() {
@@ -41,8 +42,19 @@ func run() error {
 		console = flag.Bool("console", false, "run without the tray icon and window")
 		unpair  = flag.Bool("unpair", false, "forget the paired Mac and exit")
 		verbose = flag.Bool("v", false, "verbose logging")
+		version = flag.Bool("version", false, "print the version and licence and exit")
 	)
 	flag.Parse()
+
+	if *version {
+		attachConsole()
+		fmt.Println(about.Summary)
+		fmt.Println("Built on:")
+		for _, credit := range about.Acknowledgements {
+			fmt.Printf("  %-22s %-14s %s\n", credit.Name, credit.Licence, credit.URL)
+		}
+		return nil
+	}
 
 	// Built as a GUI binary so the tray app does not drag a console window
 	// around; --console reattaches to the terminal that launched it.
@@ -76,6 +88,9 @@ func run() error {
 	debug.SetTraceback("all")
 	log := slog.New(slog.NewTextHandler(logWriter(logFile), &slog.HandlerOptions{Level: level}))
 	safe.Logger = log
+	// First line of every log: a bug report that quotes the log then says
+	// which build it came from without anyone having to ask.
+	log.Info("starting", "version", about.Version, "repository", about.Repository)
 	quietMDNSLogging(*verbose)
 
 	// A panic on the main goroutine still ends the process, but now it says so
@@ -136,6 +151,18 @@ func run() error {
 			OnOpenDropFolder: func() {
 				if err := openFolder(dropDir); err != nil {
 					log.Warn("could not open the drop folder", "err", err)
+				}
+			},
+			OnOpenLink: func(url string) {
+				// Only the handful of addresses this project actually points
+				// at. The window's own links can be nothing else, so anything
+				// that is not on the list did not come from the page.
+				if !about.IsKnownLink(url) {
+					log.Warn("refusing to open an unexpected link", "url", url)
+					return
+				}
+				if err := openInBrowser(url); err != nil {
+					log.Warn("could not open the link", "url", url, "err", err)
 				}
 			},
 		})
@@ -238,6 +265,7 @@ func (p *presenter) fileReceived(path string) {
 func (p *presenter) publish() {
 	p.mu.Lock()
 	state := ui.State{
+		About:       ui.Credits(),
 		LastFile:    p.lastFile,
 		DropDir:     p.dropDir,
 		Address:     p.address,

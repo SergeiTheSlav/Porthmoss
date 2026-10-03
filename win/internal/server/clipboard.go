@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/janjamscikov/porthmoss/win/internal/clipboard"
-	"github.com/janjamscikov/porthmoss/win/internal/proto"
+	"github.com/SergeiTheSlav/Porthmoss/win/internal/clipboard"
+	"github.com/SergeiTheSlav/Porthmoss/win/internal/proto"
 )
 
 // clipboardPollInterval is how often the PC's clipboard is checked. Windows

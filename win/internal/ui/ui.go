@@ -1,7 +1,11 @@
 // Package ui presents the agent's state to whoever is sitting at the PC.
 package ui
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/SergeiTheSlav/Porthmoss/win/internal/about"
+)
 
 // State is everything the window shows. It is a plain snapshot: the agent
 // rebuilds and pushes the whole thing rather than sending deltas, because it
@@ -25,6 +29,36 @@ type State struct {
 	LastFile string `json:"lastFile"`
 	// DropDir is the folder those files land in.
 	DropDir string `json:"dropDir"`
+
+	// About is who made this and what it is built on. Constant for the life of
+	// the process, and carried in the snapshot anyway: the page is a function
+	// of one state object, and the replay that happens when the window finishes
+	// loading then covers the credits with no extra plumbing.
+	About AboutInfo `json:"about"`
+}
+
+// AboutInfo is the credits, in the shape the page renders.
+type AboutInfo struct {
+	Name       string         `json:"name"`
+	Version    string         `json:"version"`
+	Author     string         `json:"author"`
+	Repository string         `json:"repository"`
+	Licence    string         `json:"licence"`
+	Copyright  string         `json:"copyright"`
+	Credits    []about.Credit `json:"credits"`
+}
+
+// Credits returns the fixed half of every state snapshot.
+func Credits() AboutInfo {
+	return AboutInfo{
+		Name:       about.Name,
+		Version:    about.Version,
+		Author:     about.Author,
+		Repository: about.Repository,
+		Licence:    about.Licence,
+		Copyright:  about.Copyright,
+		Credits:    about.Acknowledgements,
+	}
 }
 
 // UI is the agent's front end. The console implementation is the fallback and
@@ -53,6 +87,12 @@ type Options struct {
 	// OnOpenDropFolder is invoked when the user asks to see the files that
 	// have arrived from the Mac.
 	OnOpenDropFolder func()
+
+	// OnOpenLink is invoked when the user clicks one of the credits links.
+	// It must open the URL in the user's browser: following it inside the
+	// window would replace the status page with a web page and leave no way
+	// back, since the window has no navigation chrome of its own.
+	OnOpenLink func(url string)
 }
 
 // GroupFingerprint breaks a hex fingerprint into 4-character groups, so it can

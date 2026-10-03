@@ -1,7 +1,7 @@
 // Package inject turns Porthmoss input messages into real OS input events.
 package inject
 
-import "github.com/janjamscikov/porthmoss/win/internal/proto"
+import "github.com/SergeiTheSlav/Porthmoss/win/internal/proto"
 
 // Injector delivers input to the local desktop. Implementations are not
 // required to be safe for concurrent use; the server drives one from a single
