@@ -8,6 +8,11 @@ This is a software KVM minus the V: input redirection, not screen sharing.
 Nothing is streamed, so there is no video latency and no bandwidth cost — just a
 few bytes per mouse movement.
 
+MIT licensed. Both halves build from a Mac with no paid developer account on
+either side, which is worth saying plainly because it shapes the install: the
+Mac app is not notarised and the Windows agent is not code-signed, so the first
+launch on each machine takes one extra click. See [Installing](#installing).
+
 ## Status
 
 The control path works end to end: pairing, edge crossing, mouse, keyboard,
@@ -21,6 +26,134 @@ paste instead.
 
 Control runs one way: the Mac drives the PC. The PC's own mouse and keyboard
 keep working the whole time, and both mice move the same cursor.
+
+## Installing
+
+You need both halves. The Mac app on its own does nothing at all.
+
+### 1. Get the software
+
+**Build it yourself** — the recommended route, and the only one that needs no
+trust in a binary somebody else compiled. It needs Xcode (for the Mac app) and
+Go 1.26 or later (for the Windows agent); the agent is pure Go with no cgo, so
+no Windows machine or toolchain is involved.
+
+```bash
+git clone https://github.com/SergeiTheSlav/Porthmoss.git
+cd Porthmoss
+make install    # builds Porthmoss.app and copies it to /Applications
+make agent      # builds dist/porthmoss-agent.exe for the PC
+```
+
+Building it on the Mac that will run it has a second benefit, explained under
+[Building](#building): the app is signed with an identity created on first
+build and kept in its own keychain, so the Accessibility and Input Monitoring
+grants you make once survive every later rebuild.
+
+**Or take a disk image.** `make dmg` produces `dist/Porthmoss-<version>.dmg`,
+universal, ad-hoc signed, with the Windows agent inside it and a read-me of its
+own. That is the thing to hand to somebody who is not going to build anything.
+
+### 2. Let macOS open it
+
+Porthmoss is not notarised — notarisation requires a paid Apple Developer
+account — so macOS refuses the first launch of a copy that arrived from
+somewhere else. This affects a downloaded disk image, not an app you just built
+on the machine you are building on.
+
+- **macOS 15 (Sequoia) and later.** Double-click it and let it be blocked. Open
+  System Settings → Privacy & Security, scroll down to the message about
+  Porthmoss, and click **Open Anyway**.
+- **macOS 14 (Sonoma).** Right-click the app, choose **Open**, and confirm.
+- **From a terminal, either version.** `xattr -dr com.apple.quarantine
+  /Applications/Porthmoss.app` removes the download flag, after which it opens
+  normally.
+
+Only the first time, whichever route you take.
+
+### 3. Grant the two permissions
+
+The Mac app needs **both** of these in System Settings → Privacy & Security:
+
+- **Accessibility** — to move the cursor and send keystrokes
+- **Input Monitoring** — to see the keyboard at all
+
+They are separate lists and both are required. With only Accessibility granted,
+the mouse works and the keyboard silently does nothing, with no error anywhere
+to explain it — which is why Porthmoss checks both itself and names the one
+that is missing.
+
+Porthmoss asks on first launch. If it is already listed and still complains,
+select it, remove it with the minus button, and add it again.
+
+Run `Porthmoss.app`, not the bare binary in `.build`. macOS grants these
+permissions to a code identity rather than to a path, so a raw executable
+inherits whatever your terminal was granted, which is both wrong and confusing.
+
+### 4. Start the agent on the PC
+
+Copy `porthmoss-agent.exe` to the Windows machine and run it. Use the
+`-arm64` build only on an ARM Windows PC (Snapdragon X, or Parallels on Apple
+silicon); on everything else use the plain one.
+
+- Windows SmartScreen will say the publisher is unknown, because the agent is
+  not code-signed — that needs a certificate authority, which costs money.
+  Choose **More info**, then **Run anyway**.
+- Allow it through the **Windows Firewall on private networks** when asked. It
+  listens on TCP 47654.
+- Some antivirus products are suspicious of anything that calls `SendInput`.
+  That is the API this is built on, and there is no way around it; the source
+  is right here if you want to check what it does with it.
+
+It puts an icon in the notification area and opens a window showing a six-digit
+pairing code. The window is WebView2, which ships with Windows 11 and most
+Windows 10 installs; without it the agent still works, it just runs headless,
+and `--console` is how to see what it is doing.
+
+### 5. Pair them
+
+Open Porthmoss on the Mac. It finds the PC on the network by itself, and asks
+once for the six digits the PC is showing. After that it reconnects on its own,
+and the code is never needed again.
+
+Both machines must be on the same network, and the Mac must be able to reach
+the PC on port 47654.
+
+### 6. Cross over
+
+Push the cursor firmly against the right edge of the Mac's screen — a
+deliberate shove, not a brush — and it appears on the PC. Push back at the far
+edge to come home, or press **⌃⌥⌘P** at any time.
+
+Which edge leads to the PC, and on which screen, is in Settings. So are pointer
+speed and how hard the push has to be.
+
+## Two screens on the Mac
+
+With more than one display attached, "push the right edge" stops being a single
+place, and Porthmoss lets you say which one you mean. Settings → *The PC is
+beyond this edge* → *…of this screen*.
+
+By default any screen whose chosen edge is **free** leads to the PC. An edge is
+free when none of the Mac's own displays occupies the space beyond it — so on
+the usual arrangement of a laptop with an external screen stacked above it,
+both the laptop's left and right edges are free, and so are the external
+screen's, while the laptop's top edge and the external screen's bottom edge are
+the boundary between them and stay an ordinary boundary.
+
+Picking one screen by name narrows that to exactly one way across, which is
+what you want as soon as two screens both have a free edge on the same side.
+
+You can also pick an edge that is *not* free — the inner boundary between two
+side-by-side screens — and that is a real trade rather than a mistake. There,
+Porthmoss holds the cursor against the boundary while the push adds up, because
+without that the pointer is already on the next screen before a push could
+register. Getting to that screen the ordinary way still works: nudge, pause,
+then nudge again, and the pointer passes through instead. The app says so under
+the picker when you choose such an edge.
+
+`PorthmossMac --cli --displays` lists what this Mac has, with each screen's
+identifier and which of its edges are free.
 
 ## How it works
 
@@ -73,9 +206,11 @@ See [docs/protocol.md](docs/protocol.md) for the wire format.
   does not fling you onto the other machine.
 - **You come back where you left.** The vertical position is preserved in both
   directions, proportionally.
-- **Inner display edges stay inner.** On a multi-display Mac only the outer rim
-  of the whole desktop leads to Windows; the boundary between two Mac displays
-  stays an ordinary boundary.
+- **The boundary between two Mac displays stays a boundary.** Only an edge with
+  nothing of the Mac's own beyond it leads to Windows — measured against where
+  the displays actually are, not against the bounding box of the desktop, so a
+  laptop with a screen stacked above it keeps both of its side edges. See
+  [Two screens on the Mac](#two-screens-on-the-mac).
 - **Trackpad scrolling is accumulated** into wheel notches, so slow two-finger
   scrolling produces steady movement instead of nothing.
 
@@ -121,10 +256,17 @@ machine or toolchain is needed to produce the `.exe`.
 make            # Porthmoss.app + the Windows agent, into dist/
 make install    # also copy the app to /Applications
 make dist       # agent for Windows x64 and ARM64
+make dmg        # universal, ad-hoc signed disk image with both halves
 ```
 
 `make` produces `dist/Porthmoss.app`, which you can double-click straight from
 Finder. `make install` puts it in `/Applications` so Spotlight finds it too.
+
+The version is declared once, in `mac/Sources/PorthmossCore/About.swift`, and
+read from there by the app bundle and the disk image. The agent carries its own
+copy in `win/internal/about/about.go` — Swift cannot import Go constants and Go
+cannot import Swift ones — and `make check-version`, which `make test` runs,
+fails if the two ever disagree.
 
 The app icon is drawn from source by `mac/Scripts/make-icon.swift` and built
 into the bundle, so it is changed by editing the drawing rather than a binary
@@ -132,48 +274,45 @@ asset. It borrows Termoss's background — the same slate squircle, gradient and
 lit top edge, sampled from its icon rather than eyeballed — so the two read as
 a pair on the Dock.
 
-## Running
+### Why it is signed at all
 
-On the **Windows PC**, copy `dist/porthmoss-agent.exe` over and run it. It puts
-an icon in the notification area and opens a window showing the pairing code.
-Allow it through the Windows Firewall on private networks when prompted.
-
-The window is WebView2, which ships with Windows 11 and most Windows 10
-installs. Without it the agent still works — it just runs headless, and
-`--console` is the way to see what it is doing.
-
-On the **Mac**, double-click `dist/Porthmoss.app` (or `make run`). It lives in
-the menu bar, finds the PC on the network, and asks once for the 6-digit code
-the agent is showing. After that it reconnects on its own.
-
-The menu bar glyph fills in while the PC is being driven, so it always answers
-"where is my keyboard going right now?"
-
-Both sides keep a headless mode for SSH sessions and test harnesses:
-`PorthmossMac --cli` and `porthmoss-agent.exe --console`.
-
-### Permissions
-
-The Mac app needs **both** Accessibility and Input Monitoring in
-System Settings → Privacy & Security. Accessibility to modify events, Input
-Monitoring to see keystrokes at all; with only one, the tap fails to install.
-
-Run `Porthmoss.app`, not the bare binary — which is why `make` builds the
-bundle rather than leaving you an executable. macOS grants those permissions to
-a code identity rather than to a path, so a raw binary inherits whatever the
-terminal was granted.
-
-`make app` signs with a self-signed identity created on first build, kept in
+`make app` signs with a self-signed identity created on first build and kept in
 its own keychain (`mac/Scripts/signing-identity.sh`). That is not decoration:
-an ad-hoc signature has no stable identity, so **every rebuild silently
-revoked both permissions** while System Settings still showed the switches as
-on. The two fail differently — Accessibility gates creating the tap, Input
-Monitoring gates whether it ever sees a keystroke — so the usual symptom was a
-working mouse and a dead keyboard, with no error at all. The signing identity
-pins the designated requirement to the certificate instead of the binary, so a
-grant made once survives every later build.
+an ad-hoc signature has no stable identity, so **every rebuild silently revoked
+both permissions** while System Settings still showed the switches as on. The
+two fail differently — Accessibility gates creating the tap, Input Monitoring
+gates whether it ever sees a keystroke — so the usual symptom was a working
+mouse and a dead keyboard, with no error at all. The signing identity pins the
+designated requirement to the certificate instead of the binary, so a grant
+made once survives every later build.
 
-To remove it: `security delete-keychain ~/Library/Keychains/porthmoss-signing.keychain-db`
+That identity is local to the machine that created it, which is exactly why
+`make dmg` signs ad-hoc instead: elsewhere, a certificate the system has never
+heard of is worse than claiming no authority at all.
+
+To remove it: `security delete-keychain
+~/Library/Keychains/porthmoss-signing.keychain-db`
+
+## Headless use
+
+Both sides keep a front end for SSH sessions and test harnesses, with no window
+server and no tray involved.
+
+```bash
+PorthmossMac --cli --help        # options
+PorthmossMac --cli --displays    # this Mac's screens and their free edges
+PorthmossMac --cli --display "Built-in"   # which screen's edge leads to the PC
+PorthmossMac --cli --version     # version, licence, and what it is built on
+```
+
+```
+porthmoss-agent.exe --console -v   # run with output on the terminal
+porthmoss-agent.exe --version      # version, licence, and what it is built on
+porthmoss-agent.exe --unpair       # forget the paired Mac
+```
+
+The menu bar glyph on the Mac fills in while the PC is being driven, so it
+always answers "where is my keyboard going right now?"
 
 ## When the agent misbehaves
 
@@ -182,9 +321,10 @@ something, the reason is in its log rather than on screen:
 
     %AppData%\Porthmoss\porthmoss.log
 
-It is rewritten each launch. A crash writes a recovered-panic line with a stack
-there before anything else. Running `porthmoss-agent.exe --console -v` also
-prints everything to the terminal live.
+The previous run's log is kept alongside it as `porthmoss.log.1`, because when
+the agent dies and is relaunched the crash is in the *previous* run. A crash
+writes a recovered-panic line with a stack there before anything else, and the
+first line of every log says which version wrote it.
 
 ## Known limitations
 
@@ -207,13 +347,17 @@ prints everything to the terminal live.
   source app — so the other direction goes through copy and paste instead.
 - The Windows window needs the WebView2 runtime. Present on Windows 11 and
   most Windows 10 machines; without it the agent runs headless.
+- Neither half is signed by an authority anyone's operating system trusts, for
+  the plain reason that both certificates cost money. See
+  [Installing](#installing) for what that means in practice.
 
 ## Running the tests
 
 ```bash
+make test         # version check, agent tests, Mac tests
 make test-go      # agent: protocol, pairing, dead-man switch, single
                   #        controller, injection, clipboard, file transfer
-make test-mac     # Mac: wire codec, key mapping, edge crossing
+make test-mac     # Mac: wire codec, key mapping, edge crossing, resisted edges
 make test-cursor  # end-to-end: does the Mac cursor stay put while driving the PC?
 ```
 
@@ -243,14 +387,19 @@ sudo xcodebuild -license accept
 ## Layout
 
 ```
+LICENSE               MIT
+THIRD-PARTY-NOTICES.md what the Windows agent is built on
 docs/protocol.md      wire format and trust model
 mac/Sources/
-  PorthmossCore/      wire codec, key map, edge-crossing model — no frameworks,
-                      so the rules that decide how this feels are unit-testable
-  PorthmossMac/       event tap, pinned TLS client, cursor control, CLI
+  PorthmossCore/      wire codec, key map, edge-crossing model, version and
+                      credits — no frameworks, so the rules that decide how
+                      this feels are unit-testable
+  PorthmossMac/       event tap, pinned TLS client, cursor control, display
+                      geometry, CLI
   PorthmossMac/Views/ SwiftUI menu bar app, sharing Termoss's glass language
 win/
   cmd/porthmoss-agent entrypoint and the state-to-UI presenter
+  internal/about      version, licence and acknowledgements
   internal/proto      wire protocol, mirrors PorthmossCore
   internal/inject     SendInput, plus a recording fake for tests on any OS
   internal/server     TLS server, handshake, dispatch, dead-man switch
@@ -258,6 +407,31 @@ win/
   internal/discovery  mDNS advertisement
   internal/ui         tray icon, WebView2 window, Fluent page, console fallback
 ```
+
+## Contributing
+
+Issues and pull requests are welcome. Two things to know before you start:
+
+- `make test` must pass. The edge-crossing rules in `PorthmossCore` are what
+  make this feel good or awful, and they are unit-testable on purpose — a
+  change to how crossing behaves should arrive with a test that describes the
+  behaviour in a sentence.
+- Comments here explain *why*, not *what*. Most of them exist because something
+  behaved surprisingly once; that is the kind worth adding.
+
+## Licence and credits
+
+Porthmoss is MIT licensed — see [LICENSE](LICENSE). © 2026 Jan Jamscikov.
+
+The Mac app has no third-party dependencies. The Windows agent stands on
+[energye/systray](https://github.com/energye/systray),
+[jchv/go-webview2](https://github.com/jchv/go-webview2),
+[jchv/go-winloader](https://github.com/jchv/go-winloader),
+[libp2p/zeroconf](https://github.com/libp2p/zeroconf),
+[miekg/dns](https://github.com/miekg/dns) and
+[golang.org/x/sys](https://pkg.go.dev/golang.org/x/sys) —
+see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). The same list is in the
+About panel of both apps, with what each one actually does here.
 
 ## Name
 
