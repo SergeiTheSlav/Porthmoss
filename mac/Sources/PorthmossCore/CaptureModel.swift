@@ -12,6 +12,10 @@ public struct Rect: Equatable, Sendable {
     }
     public var maxX: Double { x + width }
     public var maxY: Double { y + height }
+
+    public func contains(_ point: Point) -> Bool {
+        point.x >= x && point.x < maxX && point.y >= y && point.y < maxY
+    }
 }
 
 /// Which edge of the Mac's desktop leads to the Windows PC.
@@ -45,6 +49,19 @@ public struct CaptureConfig: Sendable, Equatable {
     /// returnable once you have actually gone somewhere.
     public var returnArmDistance: Double = 64
 
+    /// Hold the cursor against the crossing edge while the push adds up.
+    ///
+    /// Only needed when the chosen edge has another Mac display beyond it.
+    /// There, the window server has already moved the pointer onto the
+    /// neighbouring display by the second event, so a push can never add up
+    /// and the crossing simply never fires. Holding the cursor still gives it
+    /// somewhere to accumulate.
+    ///
+    /// The cost is that the ordinary way of reaching that neighbour — just
+    /// moving onto it — now meets resistance, so pausing mid-push gives up
+    /// and lets the pointer through. See `resistanceGivenUp`.
+    public var resistAtEdge = false
+
     public init() {}
 }
 
@@ -53,6 +70,10 @@ public enum CaptureAction: Equatable, Sendable {
     /// Take control: hide the Mac cursor and tell the agent where to appear.
     case enterRemote(x: UInt16, y: UInt16)
     case moveRemote(x: UInt16, y: UInt16)
+    /// Keep the Mac cursor at this point: a push is adding up at an edge with
+    /// another Mac display beyond it, and letting the pointer through would
+    /// end the push before it could finish.
+    case holdAtEdge(Point)
     /// Hand control back, putting the Mac cursor at this global point.
     case returnToLocal(Point)
 }
@@ -72,8 +93,20 @@ public final class CaptureModel {
     /// The Mac display the crossing happens on, in global coordinates.
     public var localDisplay: Rect
 
+    /// True while the cursor is being held against a resisted edge.
+    ///
+    /// The caller needs this: the pointer has technically wandered onto the
+    /// display beyond, so without it the next movement would be attributed to
+    /// the neighbour and the push abandoned a frame after it started.
+    public private(set) var isHoldingAtEdge = false
+
     private var push: Double = 0
     private var lastPushAt: TimeInterval = 0
+    /// Set when a push at a resisted edge is abandoned, and cleared once the
+    /// cursor comes away from that edge. While it is set the pointer passes
+    /// straight through, which is the only way the Mac display beyond stays
+    /// reachable by simply moving onto it.
+    private var resistanceGivenUp = false
     /// False from the moment control crosses over until the cursor has moved
     /// `returnArmDistance` clear of the entry edge.
     private var returnArmed = false
@@ -100,25 +133,55 @@ public final class CaptureModel {
         isRemote = false
         push = 0
         returnArmed = false
+        isHoldingAtEdge = false
+        resistanceGivenUp = false
         return .returnToLocal(localPointOnEdge(fraction: exitFraction))
     }
 
     // MARK: - Local side
 
     private func maybeCross(cursor: Point, delta: Point, now: TimeInterval) -> CaptureAction {
-        let outward = outwardComponent(of: delta)
-        guard outward > 0, isAtEdge(cursor) else {
+        guard isAtEdge(cursor) else {
             push = 0
+            // Away from the edge, a crossing that was given up re-arms.
+            resistanceGivenUp = false
+            isHoldingAtEdge = false
             return .none
         }
-        if now - lastPushAt > config.pushWindow { push = 0 }
+        let outward = outwardComponent(of: delta)
+        guard outward > 0 else {
+            // Turning back, or sliding along the edge, is not a push.
+            push = 0
+            resistanceGivenUp = false
+            isHoldingAtEdge = false
+            return .none
+        }
+
+        // A pause abandons the push, so a slow drift along the edge never adds
+        // up to a crossing. At a resisted edge the same pause is also how the
+        // user says "I meant the other Mac display": the hold is dropped until
+        // the cursor comes away from the edge again.
+        if now - lastPushAt > config.pushWindow {
+            if config.resistAtEdge, push > 0 { resistanceGivenUp = true }
+            push = 0
+        }
+        if resistanceGivenUp {
+            isHoldingAtEdge = false
+            return .none
+        }
+
         push += outward
         lastPushAt = now
-        guard push >= config.pushThreshold else { return .none }
+        guard push >= config.pushThreshold else {
+            guard config.resistAtEdge else { return .none }
+            isHoldingAtEdge = true
+            return .holdAtEdge(localPointOnEdge(fraction: edgeFraction(of: cursor)))
+        }
 
         push = 0
         isRemote = true
         returnArmed = false
+        isHoldingAtEdge = false
         exitFraction = edgeFraction(of: cursor)
         remoteCursor = remoteEntryPoint(fraction: exitFraction)
         let (x, y) = normalized(remoteCursor)
@@ -192,6 +255,8 @@ public final class CaptureModel {
             if push >= config.pushThreshold {
                 push = 0
                 isRemote = false
+                isHoldingAtEdge = false
+                resistanceGivenUp = false
                 exitFraction = remoteEdgeFraction()
                 return .returnToLocal(localPointOnEdge(fraction: exitFraction))
             }

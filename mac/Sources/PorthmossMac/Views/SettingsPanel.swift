@@ -26,6 +26,7 @@ struct SettingsPanel: View {
                 if expanded {
                     VStack(alignment: .leading, spacing: 14) {
                         edgePicker
+                        displayPicker
                         slider(
                             "Pointer speed on the PC",
                             value: $model.draft.capture.sensitivity,
@@ -101,6 +102,57 @@ struct SettingsPanel: View {
             .pickerStyle(.segmented)
             .labelsHidden()
         }
+    }
+
+    /// Which screen's edge leads to the PC.
+    ///
+    /// Only worth showing on a Mac with more than one display: with one
+    /// screen there is nothing to choose, and the row would just be noise.
+    @ViewBuilder
+    private var displayPicker: some View {
+        if model.displays.count > 1 {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("…of this screen")
+                    .font(.system(size: 11))
+                Picker("", selection: $model.draft.crossingDisplay) {
+                    Text("Whichever screen is on the outside").tag("")
+                    ForEach(model.displays) { display in
+                        Text(display.isMain ? "\(display.name) (main)" : display.name)
+                            .tag(display.id)
+                    }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                if let note = displayNote {
+                    Text(note)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    /// The consequence of the current choice, in a line.
+    ///
+    /// Picking an edge that has another Mac display beyond it is a real
+    /// trade, not a mistake — it is the only way to put the PC past the
+    /// *inner* edge of two side-by-side screens — so it is explained rather
+    /// than forbidden.
+    private var displayNote: String? {
+        guard !model.draft.crossingDisplay.isEmpty else {
+            return "Any screen whose \(model.draft.capture.edge.rawValue) edge is free leads to the PC."
+        }
+        guard let display = model.chosenDisplay else {
+            return "That screen is not connected. Until it is, the outside edge is used instead."
+        }
+        guard model.hasDisplayBeyond(display, edge: model.draft.capture.edge) else {
+            return "Only \(display.name) leads to the PC. The other screens keep their own edges."
+        }
+        return """
+        Another screen is beyond that edge. A firm push crosses to the PC; \
+        nudge, pause, then nudge again to pass through to that screen instead.
+        """
     }
 
     private func slider(

@@ -72,6 +72,10 @@ final class AppModel: ObservableObject {
     @Published private(set) var screens: RemoteScreens?
     @Published private(set) var discovered: [Discovery.Agent] = []
     @Published private(set) var saved: [PairingStore.SavedPC] = []
+    /// The Mac's own displays, for the crossing-display picker. Republished
+    /// when a monitor is plugged in or the arrangement changes, so the picker
+    /// is never offering a screen that is no longer there.
+    @Published private(set) var displays: [Display] = Displays.all()
     /// Whether this Mac is driving the PC. A typed state rather than a
     /// prefix match on the status line, which used to mean every message that
     /// was not "Controlling…" read as control having come home — a file
@@ -117,6 +121,39 @@ final class AppModel: ObservableObject {
         self.settings = settings
         self.draft = settings
         saved = PairingStore.saved()
+
+        // Plugging a monitor in changes which edges lead off the desktop, so
+        // both the picker and the running session have to be told. Without
+        // this the session kept the layout it was started with, and a display
+        // attached afterwards had no edge that worked.
+        screenObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.displaysChanged() }
+        }
+    }
+
+    // Held for the life of the process — this model is the app's single
+    // @StateObject — so there is nothing to unregister.
+    private var screenObserver: NSObjectProtocol?
+
+    private func displaysChanged() {
+        displays = Displays.all()
+        session?.refreshDisplays()
+    }
+
+    /// The display the crossing happens on, if the user has picked one that is
+    /// actually plugged in.
+    var chosenDisplay: Display? {
+        displays.first { $0.id == draft.crossingDisplay }
+    }
+
+    /// True when the chosen edge of this display has another of the Mac's own
+    /// displays beyond it — a choice worth warning about, because it costs the
+    /// ordinary way of reaching that display.
+    func hasDisplayBeyond(_ display: Display, edge: ScreenEdge) -> Bool {
+        !Displays.isFree(display, edge: edge, among: displays)
     }
 
     /// Discovered PCs this Mac has never paired with. One that is already

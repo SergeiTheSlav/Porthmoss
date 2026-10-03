@@ -38,6 +38,16 @@ enum CursorControl {
         CGWarpMouseCursorPosition(park)
     }
 
+    /// Holds the cursor against a crossing edge that has another Mac display
+    /// beyond it, while the push to cross adds up.
+    ///
+    /// Unlike `capture`, the cursor stays visible and the mouse stays
+    /// associated: nothing has been taken over yet, and this may well end
+    /// with the pointer passing through to that other display instead.
+    static func hold(at point: Point) {
+        CGWarpMouseCursorPosition(CGPoint(x: point.x, y: point.y))
+    }
+
     static func release(to point: Point) {
         // Warp before re-associating, or the cursor snaps back to wherever the
         // physical mouse "would" have been.
@@ -52,36 +62,5 @@ enum CursorControl {
     static var location: Point {
         guard let event = CGEvent(source: nil) else { return Point(x: 0, y: 0) }
         return Point(x: event.location.x, y: event.location.y)
-    }
-}
-
-/// The Mac's displays, in Quartz global coordinates (origin top-left, matching
-/// the coordinates CGEvent reports — deliberately not AppKit's flipped space).
-enum Displays {
-    static func all() -> [Rect] {
-        var count: UInt32 = 0
-        guard CGGetActiveDisplayList(0, nil, &count) == .success, count > 0 else { return [] }
-        var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
-        guard CGGetActiveDisplayList(count, &ids, &count) == .success else { return [] }
-        return ids.prefix(Int(count)).map { id in
-            let bounds = CGDisplayBounds(id)
-            return Rect(x: bounds.origin.x, y: bounds.origin.y,
-                        width: bounds.size.width, height: bounds.size.height)
-        }
-    }
-
-    /// The bounding box of the whole Mac desktop.
-    static func union(_ rects: [Rect]) -> Rect {
-        guard let first = rects.first else { return Rect(x: 0, y: 0, width: 0, height: 0) }
-        var minX = first.x, minY = first.y, maxX = first.maxX, maxY = first.maxY
-        for rect in rects.dropFirst() {
-            minX = min(minX, rect.x); minY = min(minY, rect.y)
-            maxX = max(maxX, rect.maxX); maxY = max(maxY, rect.maxY)
-        }
-        return Rect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
-    }
-
-    static func containing(_ point: Point, in rects: [Rect]) -> Rect? {
-        rects.first { point.x >= $0.x && point.x < $0.maxX && point.y >= $0.y && point.y < $0.maxY }
     }
 }

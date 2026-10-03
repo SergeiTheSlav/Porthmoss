@@ -17,8 +17,7 @@ final class Session: @unchecked Sendable {
     private var settings: Settings
     private var tap: EventTap?
 
-    private var displays: [Rect] = []
-    private var desktop = Rect(x: 0, y: 0, width: 0, height: 0)
+    private var displays: [Display] = []
 
     /// Continuous trackpad scrolling arrives in pixels; Windows wants notches.
     private var scrollRemainderX = 0.0
@@ -99,7 +98,8 @@ final class Session: @unchecked Sendable {
     func apply(_ new: Settings) {
         // Changing the edge while the PC is being driven would leave the
         // cursor with no way home that matches what the user just chose.
-        if new.capture.edge != settings.capture.edge, model.isRemote {
+        if new.capture.edge != settings.capture.edge
+            || new.crossingDisplay != settings.crossingDisplay, model.isRemote {
             releaseControl(model.forceReturn(), announce: false)
             onEvent(.stoppedDrivingPC("Settings applied — control returned to the Mac."))
         }
@@ -191,12 +191,13 @@ final class Session: @unchecked Sendable {
         let cursor = Point(x: event.location.x, y: event.location.y)
 
         if !model.isRemote {
-            // Only the outer rim of the whole Mac desktop leads to Windows —
-            // the boundary between two Mac displays must stay a normal
-            // display boundary.
-            guard let display = Displays.containing(cursor, in: displays),
-                  isOuterEdge(of: display) else { return false }
-            model.localDisplay = display
+            guard let display = crossingDisplay(at: cursor) else { return false }
+            model.localDisplay = display.frame
+            // Resistance is only switched on where it has to be: at an edge
+            // the user chose by hand that has another Mac display beyond it.
+            model.config.resistAtEdge = !Displays.isFree(
+                display, edge: settings.capture.edge, among: displays
+            )
         }
 
         let action = model.mouseMoved(cursor: cursor, delta: delta, now: Date().timeIntervalSinceReferenceDate)
@@ -220,6 +221,12 @@ final class Session: @unchecked Sendable {
                 let files = Session.filesBeingDragged()
                 if !files.isEmpty { sendFiles(files) }
             }
+            return true
+        case let .holdAtEdge(point):
+            // The push towards the PC is adding up at an edge that has one of
+            // the Mac's own displays beyond it. Hold the cursor there so it
+            // has somewhere to add up, and swallow the movement meanwhile.
+            CursorControl.hold(at: point)
             return true
         case let .moveRemote(x, y):
             // Undo whatever the window server did with this movement before
@@ -437,18 +444,31 @@ final class Session: @unchecked Sendable {
 
     func refreshDisplays() {
         displays = Displays.all()
-        desktop = Displays.union(displays)
     }
 
-    /// True when this display's configured edge is also the edge of the whole
-    /// Mac desktop — otherwise there is another Mac display beyond it.
-    private func isOuterEdge(of display: Rect) -> Bool {
-        let slack = 1.0
-        switch settings.capture.edge {
-        case .right: return abs(display.maxX - desktop.maxX) < slack
-        case .left: return abs(display.x - desktop.x) < slack
-        case .bottom: return abs(display.maxY - desktop.maxY) < slack
-        case .top: return abs(display.y - desktop.y) < slack
+    /// The display whose configured edge leads to the PC, if the cursor is on
+    /// it — and `nil` for every other movement, which is most of them.
+    ///
+    /// With a display chosen by hand, that one is the only way across, even
+    /// where the edge it was chosen for has another Mac display beyond it.
+    /// With nothing chosen, it is whichever display the cursor is on, and only
+    /// where that edge is also the edge of the whole Mac desktop: the boundary
+    /// between two Mac displays stays an ordinary boundary unless the user has
+    /// said otherwise.
+    private func crossingDisplay(at cursor: Point) -> Display? {
+        if !settings.crossingDisplay.isEmpty,
+           let chosen = displays.first(where: { $0.id == settings.crossingDisplay }) {
+            // While the cursor is being held against a resisted edge it has
+            // technically wandered onto the display beyond. Attributing the
+            // movement there would abandon the push a frame after it started.
+            if model.isHoldingAtEdge { return chosen }
+            return chosen.frame.contains(cursor) ? chosen : nil
         }
+        // Either nothing is chosen, or the display that was chosen is no
+        // longer plugged in. Falling back beats having no way across at all.
+        guard let display = Displays.containing(cursor, in: displays),
+              Displays.isFree(display, edge: settings.capture.edge, among: displays)
+        else { return nil }
+        return display
     }
 }

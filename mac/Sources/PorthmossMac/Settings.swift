@@ -11,6 +11,15 @@ struct Settings: Equatable {
     var capture = CaptureConfig()
     var modifiers = ModifierMapping.default
 
+    /// Which display's edge leads to the PC, as a `Display.id`.
+    ///
+    /// Empty means "whichever display has that edge on the outside of the
+    /// whole desktop", which is right for a single-screen Mac and is what
+    /// every Mac did before this was a choice. It matters as soon as two
+    /// displays both have, say, a free right edge: one of them is where the
+    /// PC is, and the other is where the user reaches for a scrollbar.
+    var crossingDisplay = ""
+
     /// macOS already applies "natural scrolling" before we see the event, so
     /// this is only for people who want the Windows side to differ.
     var invertScroll = false
@@ -49,6 +58,7 @@ struct Settings: Equatable {
         settings.clientName = stored.clientName ?? settings.clientName
         settings.invertScroll = stored.invertScroll ?? settings.invertScroll
         settings.pixelsPerNotch = stored.pixelsPerNotch ?? settings.pixelsPerNotch
+        settings.crossingDisplay = stored.crossingDisplay ?? settings.crossingDisplay
         if let edge = stored.edge.flatMap(ScreenEdge.init(rawValue:)) { settings.capture.edge = edge }
         if let value = stored.sensitivity { settings.capture.sensitivity = value }
         if let value = stored.pushThreshold { settings.capture.pushThreshold = value }
@@ -62,7 +72,8 @@ struct Settings: Equatable {
             edge: capture.edge.rawValue, sensitivity: capture.sensitivity,
             pushThreshold: capture.pushThreshold, invertScroll: invertScroll,
             pixelsPerNotch: pixelsPerNotch,
-            passthroughModifiers: modifiers.control.code == 0x1D
+            passthroughModifiers: modifiers.control.code == 0x1D,
+            crossingDisplay: crossingDisplay
         )
         let url = Settings.fileURL
         try FileManager.default.createDirectory(
@@ -83,5 +94,6 @@ struct Settings: Equatable {
         var invertScroll: Bool?
         var pixelsPerNotch: Double?
         var passthroughModifiers: Bool?
+        var crossingDisplay: String?
     }
 }
