@@ -21,12 +21,6 @@ func norm(pixel, size float64) uint16 {
 }
 
 // TestBothMiceMoveOneCursor is the behaviour the whole design turns on.
-//
-// The coordinates on the wire are absolute, but the PC's own mouse stays live
-// while the Mac drives it. Placing the pointer at the absolute position would
-// undo whatever the user's hand just did, they nudge it, the next message
-// snaps it back, and the cursor visibly teleports. Applying the difference
-// instead means both mice move one cursor.
 func TestBothMiceMoveOneCursor(t *testing.T) {
 	f := NewFake()
 	if err := f.EnterAt(norm(100, deskW), norm(100, deskH)); err != nil {

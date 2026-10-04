@@ -2,18 +2,6 @@ import CoreGraphics
 import PorthmossCore
 
 /// Parks and restores the Mac's own cursor while Windows is being driven.
-///
-/// Swallowing a mouse event in a CGEventTap is *not* enough to stop the
-/// cursor. A tap filters what applications receive; the window server updates
-/// the pointer position from the HID stream either way, so a swallowed move
-/// still slides the arrow across the screen.
-/// `CGAssociateMouseAndMouseCursorPosition(false)` is meant to decouple the
-/// two and is not reliable on its own.
-///
-/// So the cursor is actively pinned: parked at the point it crossed over, and
-/// warped straight back on every movement we intercept. It cannot drift,
-/// whatever the window server believes. `CGWarpMouseCursorPosition` generates
-/// no events, so this cannot feed back into the tap.
 enum CursorControl {
     // Only ever touched from the event tap callback and the session timer,
     // both of which run on the main run loop.

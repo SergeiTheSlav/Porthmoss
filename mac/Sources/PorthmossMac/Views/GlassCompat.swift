@@ -18,12 +18,6 @@ private func liquidGlass(tint: Color?, interactive: Bool, enabled: Bool) -> Glas
 
 extension View {
     /// A glass surface clipped to `shape`.
-    ///
-    /// - Parameters:
-    ///   - enabled: When false this is a no-op, matching `.identity` on 26.
-    ///     Used for hover states that only light up conditionally.
-    ///   - tint: Colour wash over the surface.
-    ///   - interactive: Liquid Glass's touch-reactive mode, ignored pre-26.
     @ViewBuilder
     func glassSurfaceEffect<S: InsettableShape>(
         in shape: S,

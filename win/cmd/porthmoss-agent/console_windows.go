@@ -11,12 +11,6 @@ import (
 )
 
 // attachConsole reattaches stdio to the terminal that launched us.
-//
-// The agent is linked as a GUI binary so the tray app does not drag a black
-// console window behind it. That also means `--console` starts with no stdio
-// at all, which would silently swallow every message it is meant to print.
-// consoleAttached records whether attachConsole hooked up a real console,
-// so log output can be teed to stderr only when there is one to read it.
 var consoleAttached bool
 
 func attachConsole() {
@@ -56,14 +50,6 @@ func quietMDNSLogging(verbose bool) {
 func hasConsole() bool { return consoleAttached }
 
 // captureStderr points the process's real stderr at the log file.
-//
-// A Go runtime fatal, an access violation from a bad syscall, or a panic on a
-// goroutine we did not guard, is written to os.Stderr directly, not through
-// slog. In a -H windowsgui build that stderr is not connected to anything, so
-// those messages are exactly the ones that were lost when the agent "closed
-// for no reason". Redirecting the OS handle means the runtime writes its crash
-// into porthmoss.log too. Best-effort: a failure here changes nothing that
-// worked before.
 func captureStderr(f *os.File) {
 	if f == nil || consoleAttached {
 		return // a console is already showing stderr; leave it be

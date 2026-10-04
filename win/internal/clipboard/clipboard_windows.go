@@ -34,13 +34,6 @@ const (
 )
 
 // at converts an address returned by a Win32 call into a pointer.
-//
-// go vet's unsafeptr check flags this, and is right to in the general case: a
-// uintptr is not a reference the garbage collector can see, so heap memory
-// could move out from under it. It is safe here because the memory came from
-// GlobalAlloc and lives outside the Go heap entirely, there is nothing for
-// the collector to move or reclaim. Isolated in one place so the exception is
-// visible rather than scattered.
 func at[T any](address uintptr) *T {
 	return (*T)(unsafe.Pointer(address)) //nolint:govet
 }

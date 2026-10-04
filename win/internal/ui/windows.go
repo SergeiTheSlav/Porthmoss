@@ -52,12 +52,6 @@ const (
 )
 
 // WindowsUI is a notification-area icon plus a WebView2 window.
-//
-// Threading is the delicate part. systray locks the main OS thread in its own
-// init and owns the main message loop, so the WebView gets a dedicated locked
-// thread with a message loop of its own. That is ordinary Win32, windows
-// belong to the thread that created them, but it does mean every call into
-// the view has to go through Dispatch.
 type WindowsUI struct {
 	opts Options
 
@@ -194,12 +188,6 @@ func (w *WindowsUI) runWebView() {
 }
 
 // hideOnClose makes the window's close button hide it rather than destroy it.
-//
-// This is a tray application: closing the window should put it away, not tear
-// down the interface for the rest of the session. Destroying it also ended the
-// message loop, after which every state update dispatched into released COM
-// objects and took the process with it, so the agent kept dying
-// shortly after the window was "minimised".
 func hideOnClose(hwnd uintptr) {
 	var previous uintptr
 	proc := syscall.NewCallback(func(hwnd, msg, wParam, lParam uintptr) uintptr {

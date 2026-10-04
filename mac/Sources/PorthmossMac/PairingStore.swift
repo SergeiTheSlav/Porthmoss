@@ -1,18 +1,6 @@
 import Foundation
 
 /// Remembers which PCs this Mac has paired with.
-///
-/// This does not use the Keychain. A keychain item's ACL is
-/// bound to the code identity that created it, and an ad-hoc signature changes
-/// on every rebuild, so macOS treats each build as a different app and
-/// demands the login password to hand the secret back. Being prompted for your
-/// password to talk to a PC on your own LAN is absurd, and no amount of
-/// entitlement fiddling fixes it without a stable Developer ID.
-///
-/// So the pairing lives in a 0600 file, exactly like the Windows agent's own
-/// state. That is a real trade: anything already running as you can read it.
-/// It buys nothing against that attacker anyway, a process running as you can
-/// simply synthesise the input directly.
 enum PairingStore {
     struct Pairing {
         var secret: Data

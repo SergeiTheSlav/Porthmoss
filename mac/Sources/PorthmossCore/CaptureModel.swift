@@ -41,25 +41,9 @@ public struct CaptureConfig: Sendable, Equatable {
 
     /// How far into the PC's desktop the cursor must travel before pushing
     /// back can hand control home again.
-    ///
-    /// You arrive pinned against the entry edge, which means the return
-    /// gesture is already satisfied the moment you land, a couple of leftward
-    /// movements would eject you straight back, and the resulting flapping
-    /// looks like the Mac cursor moving on its own. Control only becomes
-    /// returnable once you have actually gone somewhere.
     public var returnArmDistance: Double = 64
 
     /// Hold the cursor against the crossing edge while the push adds up.
-    ///
-    /// Only needed when the chosen edge has another Mac display beyond it.
-    /// There, the window server has already moved the pointer onto the
-    /// neighbouring display by the second event, so a push can never add up
-    /// and the crossing simply never fires. Holding the cursor still gives it
-    /// somewhere to accumulate.
-    ///
-    /// The cost is that the ordinary way of reaching that neighbour, just
-    /// moving onto it, now meets resistance, so pausing mid-push gives up
-    /// and lets the pointer through. See `resistanceGivenUp`.
     public var resistAtEdge = false
 
     public init() {}

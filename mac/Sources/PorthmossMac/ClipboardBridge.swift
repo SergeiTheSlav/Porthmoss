@@ -3,13 +3,6 @@ import Foundation
 import PorthmossCore
 
 /// Keeps the Mac's clipboard and the PC's in step.
-///
-/// The hard part is not copying text, it is not echoing: writing what the PC
-/// sent changes the local pasteboard, the poller notices, and without care it
-/// sends it straight back and the two bounce it between them forever.
-///
-/// AppKit has no notification for pasteboard changes, `changeCount` is the
-/// supported way to find out, and it has to be polled.
 final class ClipboardBridge {
     /// A clipboard is not a file transfer. A 10 MB paste has no business being
     /// mirrored across a link that exists to carry keystrokes.

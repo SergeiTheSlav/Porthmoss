@@ -1,11 +1,5 @@
 // Package about carries who wrote the agent, what it may be used for, and what
 // it is built on.
-//
-// The numbers here mirror mac/Sources/PorthmossCore/About.swift, which is the
-// Mac side's single source for the same thing. `make check-version` fails the
-// build if the two drift apart, two halves of one product reporting different
-// versions is exactly the kind of thing nobody notices until a bug report
-// quotes both.
 package about
 
 // The release this binary is part of.

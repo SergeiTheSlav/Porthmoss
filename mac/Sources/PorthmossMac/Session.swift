@@ -4,13 +4,6 @@ import Foundation
 import PorthmossCore
 
 /// Ties the event tap, the crossing model and the connection together.
-///
-/// Everything here runs on the main run loop, which is also where the event tap
-/// callback fires, so no locking, and no latency spent hopping queues on the
-/// input hot path.
-// Unchecked because every member is touched only from the main run loop, the
-// event tap callback fires there, and the connection's callbacks hop back to it
-// before touching anything here.
 final class Session: @unchecked Sendable {
     private let connection: AgentConnection
     private let model: CaptureModel
@@ -127,13 +120,8 @@ final class Session: @unchecked Sendable {
             self.connection.post(.ping, Wire.pingBody(self.nextPingID))
             self.nextPingID &+= 1
 
-            // The dead-man switch, in both directions. Whichever machine is
-            // driving, a link that has gone quiet must not leave the user
-            // stranded, and the two failures are not symmetric in how bad
-            // they are. Driving the PC and losing the link leaves the Mac
-            // without a cursor; *being* driven and losing the link leaves
-            // whatever the PC was holding down held, so every key the user
-            // presses afterwards does the wrong thing.
+            // The dead-man switch. A link that has gone quiet must not leave
+            // the user stranded with no cursor.
             guard Date().timeIntervalSince(self.lastPongAt) > 2.0 else { return }
             if self.model.isRemote {
                 self.panic("agent stopped responding")
@@ -448,13 +436,6 @@ final class Session: @unchecked Sendable {
 
     /// The display whose configured edge leads to the PC, if the cursor is on
     /// it, and `nil` for every other movement, which is most of them.
-    ///
-    /// With a display chosen by hand, that one is the only way across, even
-    /// where the edge it was chosen for has another Mac display beyond it.
-    /// With nothing chosen, it is whichever display the cursor is on, and only
-    /// where that edge is also the edge of the whole Mac desktop: the boundary
-    /// between two Mac displays stays an ordinary boundary unless the user has
-    /// said otherwise.
     private func crossingDisplay(at cursor: Point) -> Display? {
         if !settings.crossingDisplay.isEmpty,
            let chosen = displays.first(where: { $0.id == settings.crossingDisplay }) {

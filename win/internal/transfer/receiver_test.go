@@ -12,11 +12,6 @@ import (
 // TestSafeNameCannotEscape states the property that actually matters: whatever
 // the other machine sends, the result either fails or is a single path
 // component that lands inside the download directory.
-//
-// Rejecting is not the only safe answer, and mostly not the right one, a name
-// with a directory in it is reduced to its last component, which is what a
-// browser does with Content-Disposition. What must never happen is a result
-// that still contains a separator, or that resolves upwards.
 func TestSafeNameCannotEscape(t *testing.T) {
 	hostile := []string{
 		"../../.ssh/authorized_keys",
@@ -25,7 +20,8 @@ func TestSafeNameCannotEscape(t *testing.T) {
 		`C:\Windows\System32\calc.exe`,
 		"....//....//etc/passwd",
 		"foo/../../bar",
-		`\server\shareile.txt`}
+		`\server\share
+ile.txt`}
 	for _, name := range hostile {
 		got, err := SafeName(name)
 		if err != nil {

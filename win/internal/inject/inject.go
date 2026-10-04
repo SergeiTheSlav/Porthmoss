@@ -14,12 +14,6 @@ type Injector interface {
 
 	// MoveTo applies the movement since the previous request to wherever the
 	// pointer actually is now.
-	//
-	// Not an absolute placement, despite the absolute coordinates on the wire.
-	// The PC's own mouse is still live while the Mac drives it, and if the user
-	// nudges it, an absolute placement undoes that nudge on the very next
-	// message, the pointer visibly teleports back. Applying the difference
-	// instead means both mice move one cursor, and neither cancels the other.
 	MoveTo(x, y uint16) error
 	// Button presses or releases a mouse button.
 	Button(button byte, down bool) error

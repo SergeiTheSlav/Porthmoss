@@ -156,12 +156,6 @@ func (w *Windows) EnterAt(x, y uint16) error {
 }
 
 // MoveTo applies the Mac's movement to wherever the pointer actually is.
-//
-// The coordinates on the wire are absolute, but placing the pointer at them
-// would undo anything the PC's own mouse did in between: the user nudges it,
-// the next message from the Mac snaps it back, and the cursor visibly
-// teleports. Taking the difference instead lets both mice move one cursor,
-// with neither cancelling the other.
 func (w *Windows) MoveTo(x, y uint16) error {
 	// Only the virtual-desktop rectangle is needed here, and it comes from
 	// GetSystemMetrics with no callback. Calling Screens() on every movement

@@ -35,12 +35,6 @@ type Receiver struct {
 
 // SafeName reduces a name chosen by the other machine to something that can
 // only ever land inside the destination directory.
-//
-// This is the part of file transfer that matters. A name is attacker-chosen
-// data: "../../.ssh/authorized_keys", "C:\Windows\System32\...", a trailing
-// dot or space that Windows silently strips, or a reserved device name like
-// CON or LPT1 that opens a device instead of a file. Everything here is a
-// rejection of one of those, and the result is always a single path component.
 func SafeName(name string) (string, error) {
 	// Both separators, because the sender may be either platform.
 	name = strings.ReplaceAll(name, "\\", "/")

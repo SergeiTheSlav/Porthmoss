@@ -12,12 +12,6 @@ struct Settings: Equatable {
     var modifiers = ModifierMapping.default
 
     /// Which display's edge leads to the PC, as a `Display.id`.
-    ///
-    /// Empty means "whichever display has that edge on the outside of the
-    /// whole desktop", which is right for a single-screen Mac and is what
-    /// every Mac did before this was a choice. It matters as soon as two
-    /// displays both have, say, a free right edge: one of them is where the
-    /// PC is, and the other is where the user reaches for a scrollbar.
     var crossingDisplay = ""
 
     /// macOS already applies "natural scrolling" before we see the event, so
@@ -28,12 +22,6 @@ struct Settings: Equatable {
 
 
     /// Where configuration lives.
-    ///
-    /// PORTHMOSS_CONFIG_DIR redirects it, which the test scripts use. They
-    /// drive this Mac with synthetic input, and synthetic keystrokes land in
-    /// whatever has focus, more than once that was the settings panel, which
-    /// silently changed the user's crossing edge and then failed a test that
-    /// had nothing to do with it.
     static var configDirectory: URL {
         if let override = ProcessInfo.processInfo.environment["PORTHMOSS_CONFIG_DIR"] {
             return URL(fileURLWithPath: override, isDirectory: true)

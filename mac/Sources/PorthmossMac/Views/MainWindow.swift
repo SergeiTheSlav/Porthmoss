@@ -41,16 +41,6 @@ struct MainWindow: View {
 }
 
 /// The wordmark, and the way to the credits.
-///
-/// πορθμός is Greek for a strait, the narrow water between two shores. The
-/// doubled final sigma is deliberate: it mirrors the doubled s in Porthmoss,
-/// so the mark and the product name end the same way. Set quietly, in
-/// half-transparent grey, so it reads as a mark rather than as another piece
-/// of the interface.
-///
-/// Clicking it opens the credits. That is where a wordmark leads in most Mac
-/// apps, and it keeps a panel nobody opens twice out of a window that is
-/// otherwise all things you came here to do.
 private struct Logotype: View {
     @State private var showingAbout = false
     @State private var hovering = false

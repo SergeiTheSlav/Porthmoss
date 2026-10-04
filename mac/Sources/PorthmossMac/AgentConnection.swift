@@ -20,12 +20,6 @@ final class AgentConnection: @unchecked Sendable {
     private var pendingPong: @Sendable (UInt64) -> Void = { _ in }
 
     /// Frames that arrived before the session was wired up.
-    ///
-    /// The agent can send its first message immediately after the handshake,    /// the probe sends ENTER about a millisecond later, while the Mac only
-    /// installs its handlers once Session.start() runs. Without this those
-    /// frames land on a default no-op and vanish, and losing ENTER in
-    /// particular means the Mac is being driven without knowing it: its own
-    /// edge detection stays live and it never releases.
     private var buffered: [(type: UInt8, body: [UInt8])] = []
     private var deliveringToSession = false
     /// Enough to cover the gap; a peer that floods before we are ready is not

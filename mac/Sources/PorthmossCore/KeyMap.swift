@@ -12,12 +12,6 @@ public struct Scancode: Equatable, Sendable {
 }
 
 /// How the Mac's modifiers should appear to Windows.
-///
-/// The default follows what Synergy and Logitech Flow do, and it is the whole
-/// reason this feels native: Cmd becomes Ctrl, so Cmd+C, Cmd+T and Cmd+W all
-/// keep working from muscle memory. Mac Control then has to go somewhere, and
-/// the Windows key is the natural home, it plays the same "system" role Cmd
-/// plays on macOS.
 public struct ModifierMapping: Sendable, Equatable {
     public var command: Scancode
     public var control: Scancode

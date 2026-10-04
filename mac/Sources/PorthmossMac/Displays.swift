@@ -77,19 +77,6 @@ enum Displays {
 
     /// True when nothing of the Mac's own is beyond this display's `edge`, so
     /// the pointer leaving it has nowhere to go but the PC.
-    ///
-    /// This is what keeps the boundary between two Mac displays an ordinary
-    /// boundary unless the user has explicitly asked for it to lead to the PC.
-    ///
-    /// It has to be actual geometry rather than a comparison against the
-    /// bounding box of the whole desktop. On the common arrangement, a
-    /// laptop with an external screen stacked above it, the box extends past
-    /// the laptop's left and right edges, so a box comparison declares both of
-    /// them blocked and leaves the built-in display with no usable edge but
-    /// the bottom one, although there is plainly nothing to the laptop's
-    /// right. What matters is whether another display actually occupies the
-    /// space the pointer would move into, which means overlapping the span of
-    /// this edge, touching along it, as stacked displays do, is not overlap.
     static func isFree(_ display: Display, edge: ScreenEdge, among displays: [Display]) -> Bool {
         !displays.contains { other in
             guard other.id != display.id else { return false }
