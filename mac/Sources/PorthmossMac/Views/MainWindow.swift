@@ -177,7 +177,7 @@ private struct StatusPanel: View {
 // MARK: - Saved PCs
 
 /// PCs this Mac has already paired with. One click reconnects; there is no
-/// code to type and nothing to discover, which is the whole point of having
+/// code to type and nothing to discover, which is the reason for having
 /// paired in the first place.
 private struct SavedPanel: View {
     @EnvironmentObject private var model: AppModel

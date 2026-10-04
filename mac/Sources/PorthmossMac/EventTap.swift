@@ -17,7 +17,7 @@ final class EventTap {
 
     /// How often the system has disabled the tap for being slow. Every one of
     /// these is a window in which input reached the Mac instead of the PC, so
-    /// it is worth surfacing rather than silently recovering.
+    /// it is worth reporting.
     private(set) var timeoutCount = 0
     var onTimeout: (Int) -> Void = { _ in }
 
@@ -101,7 +101,7 @@ final class EventTap {
     private func dispatch(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         // The system disables a tap whose callback is too slow, and silently
         // stops delivering events until it is switched back on. Missing this is
-        // the classic way an event tap "randomly stops working".
+        // a common way an event tap "randomly stops working".
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             if let port = machPort { CGEvent.tapEnable(tap: port, enable: true) }
             if type == .tapDisabledByTimeout {

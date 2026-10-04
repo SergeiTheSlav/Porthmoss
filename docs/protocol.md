@@ -89,7 +89,7 @@ wrote.
 
 ## File transfer
 
-One file at a time, in order. Deliberately not interleaved: two at once would
+One file at a time, in order. Not interleaved: two at once would
 need stream ids and a scheduler, to save a user dragging a folder half a second.
 
     0x60 FILE_BEGIN  u16 name_len, name, u64 size, u16 index, u16 total, u8 flags

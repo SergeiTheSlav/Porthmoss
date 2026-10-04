@@ -80,7 +80,7 @@ public enum CaptureAction: Equatable, Sendable {
 
 /// The edge-crossing state machine.
 ///
-/// It is deliberately free of CoreGraphics so the crossing rules, which are
+/// It is free of CoreGraphics so the crossing rules, which are
 /// most of what makes this feel good or awful, can be tested directly.
 public final class CaptureModel {
     public private(set) var isRemote = false

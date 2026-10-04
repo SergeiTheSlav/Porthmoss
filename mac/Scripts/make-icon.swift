@@ -12,7 +12,7 @@ import UniformTypeIdentifiers
 // gradients inside the glyph.
 //
 // Everything is proportional to `size`, so one drawing serves 16pt and 1024pt.
-// Detail that would turn to mud at 16pt is deliberately absent.
+// Detail that would turn to mud at 16pt is absent.
 
 let outputDirectory = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "."
 

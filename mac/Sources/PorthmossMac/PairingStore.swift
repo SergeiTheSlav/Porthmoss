@@ -2,7 +2,7 @@ import Foundation
 
 /// Remembers which PCs this Mac has paired with.
 ///
-/// This deliberately does *not* use the Keychain. A keychain item's ACL is
+/// This does not use the Keychain. A keychain item's ACL is
 /// bound to the code identity that created it, and an ad-hoc signature changes
 /// on every rebuild, so macOS treats each build as a different app and
 /// demands the login password to hand the secret back. Being prompted for your

@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestGoSurvivesAPanic is the whole point of the package: a panicking
+// TestGoSurvivesAPanic covers the main case: a panicking
 // goroutine must not take the process down with it.
 func TestGoSurvivesAPanic(t *testing.T) {
 	var wg sync.WaitGroup

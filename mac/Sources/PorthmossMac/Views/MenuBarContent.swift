@@ -1,7 +1,7 @@
 import PorthmossCore
 import SwiftUI
 
-/// The menu bar dropdown. Deliberately thin: status, the one action that
+/// The menu bar dropdown. Kept thin: status, the one action that
 /// matters right now, and a way into the window.
 struct MenuBarContent: View {
     @EnvironmentObject private var model: AppModel

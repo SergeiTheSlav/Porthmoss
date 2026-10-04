@@ -217,7 +217,7 @@ struct CrossingStabilityTests {
             )
             if case .returnToLocal = action { returned = true; break }
         }
-        #expect(returned, "deliberately walking back to the edge must still return control")
+        #expect(returned, "walking back to the edge must still return control")
         #expect(!model.isRemote)
     }
 }

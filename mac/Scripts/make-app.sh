@@ -1,7 +1,7 @@
 #!/bin/bash
 # Builds Porthmoss.app.
 #
-# The bundle is not optional. macOS grants Accessibility and Input Monitoring
+# The bundle is required. macOS grants Accessibility and Input Monitoring
 # to a code identity rather than to a path, so a bare binary inherits whatever
 # the launching terminal was granted, which is both wrong and confusing. A
 # bundle with a stable identifier gets its own entry in System Settings, and

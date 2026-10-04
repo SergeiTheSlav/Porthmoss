@@ -24,7 +24,7 @@ const clipboardPollInterval = 400 * time.Millisecond
 // sends it straight back and the two bounce it between them.
 //
 // There are two guards against that, and either alone is enough, the test
-// only fails with both removed. Both are kept deliberately. Re-reading the
+// only fails with both removed. Both are kept. Re-reading the
 // sequence number after a write is the cheap one, but on Windows the sequence
 // number moves for reasons that are not ours and the read-back can race a
 // third application; remembering the text itself catches what slips past.

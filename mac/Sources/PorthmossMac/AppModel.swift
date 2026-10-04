@@ -340,7 +340,7 @@ final class AppModel: ObservableObject {
             state = .failed(reason)
             teardown()
         case .ready, .note:
-            // Deliberately no change of direction. A transfer reporting
+            // No change of direction here. A transfer reporting
             // "Sending…" mid-session must not read as control coming home.
             break
         }

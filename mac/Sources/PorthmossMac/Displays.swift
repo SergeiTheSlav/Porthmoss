@@ -5,7 +5,7 @@ import PorthmossCore
 /// One of the Mac's displays.
 ///
 /// In Quartz global coordinates, origin top-left, matching what CGEvent
-/// reports, deliberately not AppKit's flipped space.
+/// reports, not AppKit's flipped space.
 struct Display: Identifiable, Equatable, Sendable {
     /// Stable enough to write into a settings file and still mean the same
     /// monitor after a reboot or a replug. See `Displays.identifier`.

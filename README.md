@@ -182,7 +182,7 @@ that certificate fingerprint, so the same code typed at a different machine
 derives a different secret and cannot be replayed. The secret lives in a 0600
 file. Five failed attempts rotate the code. One Mac per agent.
 
-The pairing deliberately avoids the macOS Keychain. A keychain item's ACL binds
+The pairing avoids the macOS Keychain. A keychain item's ACL binds
 to the code identity that created it, and an ad-hoc signature changes on every
 rebuild, so macOS treats each build as a new app and asks for your login
 password before handing the secret back. The trade is that anything already

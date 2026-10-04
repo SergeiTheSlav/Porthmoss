@@ -198,7 +198,7 @@ func (w *WindowsUI) runWebView() {
 // This is a tray application: closing the window should put it away, not tear
 // down the interface for the rest of the session. Destroying it also ended the
 // message loop, after which every state update dispatched into released COM
-// objects and took the process with it, which is why the agent kept dying
+// objects and took the process with it, so the agent kept dying
 // shortly after the window was "minimised".
 func hideOnClose(hwnd uintptr) {
 	var previous uintptr
