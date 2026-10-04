@@ -20,8 +20,7 @@ func TestSafeNameCannotEscape(t *testing.T) {
 		`C:\Windows\System32\calc.exe`,
 		"....//....//etc/passwd",
 		"foo/../../bar",
-		`\server\share
-ile.txt`}
+		`\\server\share\file.txt`}
 	for _, name := range hostile {
 		got, err := SafeName(name)
 		if err != nil {
