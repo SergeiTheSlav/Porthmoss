@@ -18,7 +18,7 @@ const (
 
 	// DROPFILES, the header CF_HDROP data starts with:
 	//   DWORD pFiles; POINT pt; BOOL fNC; BOOL fWide;
-	// 20 bytes on every architecture — the fields are all fixed width.
+	// 20 bytes on every architecture, the fields are all fixed width.
 	dropFilesHeaderSize = 20
 )
 

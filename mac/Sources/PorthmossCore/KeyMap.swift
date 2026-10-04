@@ -16,7 +16,7 @@ public struct Scancode: Equatable, Sendable {
 /// The default follows what Synergy and Logitech Flow do, and it is the whole
 /// reason this feels native: Cmd becomes Ctrl, so Cmd+C, Cmd+T and Cmd+W all
 /// keep working from muscle memory. Mac Control then has to go somewhere, and
-/// the Windows key is the natural home — it plays the same "system" role Cmd
+/// the Windows key is the natural home, it plays the same "system" role Cmd
 /// plays on macOS.
 public struct ModifierMapping: Sendable, Equatable {
     public var command: Scancode
@@ -25,9 +25,9 @@ public struct ModifierMapping: Sendable, Equatable {
     public var shift: Scancode
 
     public static let `default` = ModifierMapping(
-        command: Scancode(0x1D),              // left Ctrl
+        command: Scancode(0x1D),             // left Ctrl
         control: Scancode(0x5B, extended: true), // left Win
-        option: Scancode(0x38),               // left Alt
+        option: Scancode(0x38),              // left Alt
         shift: Scancode(0x2A)                 // left Shift
     )
 
@@ -48,7 +48,7 @@ public struct ModifierMapping: Sendable, Equatable {
 /// Translates macOS virtual key codes into Windows scancodes.
 ///
 /// We send scancodes rather than virtual key codes so the agent never has to
-/// know which keyboard layout the Mac is using — Windows applies the layout
+/// know which keyboard layout the Mac is using, Windows applies the layout
 /// the user selected on the PC, which is what they expect.
 public enum KeyMap {
     /// Mac virtual keycodes for the modifier keys, which arrive as
@@ -131,7 +131,7 @@ public enum KeyMap {
         0x60: Scancode(0x3F), 0x61: Scancode(0x40), 0x62: Scancode(0x41), 0x64: Scancode(0x42),
         0x65: Scancode(0x43), 0x6D: Scancode(0x44), 0x67: Scancode(0x57), 0x6F: Scancode(0x58),
 
-        // Navigation — all E0-prefixed on Windows
+        // Navigation, all E0-prefixed on Windows
         0x7B: Scancode(0x4B, extended: true), 0x7C: Scancode(0x4D, extended: true),
         0x7E: Scancode(0x48, extended: true), 0x7D: Scancode(0x50, extended: true),
         0x73: Scancode(0x47, extended: true), 0x77: Scancode(0x4F, extended: true),

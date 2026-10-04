@@ -136,8 +136,8 @@ struct SettingsPanel: View {
     /// The consequence of the current choice, in a line.
     ///
     /// Picking an edge that has another Mac display beyond it is a real
-    /// trade, not a mistake — it is the only way to put the PC past the
-    /// *inner* edge of two side-by-side screens — so it is explained rather
+    /// trade, not a mistake, it is the only way to put the PC past the
+    /// *inner* edge of two side-by-side screens, so it is explained rather
     /// than forbidden.
     private var displayNote: String? {
         guard !model.draft.crossingDisplay.isEmpty else {

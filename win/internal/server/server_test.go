@@ -182,7 +182,7 @@ func TestPairAndControl(t *testing.T) {
 	mustSend(t, c, proto.TypeMouseButton, proto.MouseButton{Button: proto.ButtonLeft, Down: true}.Encode())
 	mustSend(t, c, proto.TypeMouseButton, proto.MouseButton{Button: proto.ButtonLeft, Down: false}.Encode())
 	mustSend(t, c, proto.TypeMouseWheel, proto.MouseWheel{DY: -3}.Encode())
-	// Ctrl down, C, Ctrl up — what Cmd+C on the Mac keyboard becomes.
+	// Ctrl down, C, Ctrl up, what Cmd+C on the Mac keyboard becomes.
 	mustSend(t, c, proto.TypeKey, proto.Key{Scancode: 0x1D, Down: true}.Encode())
 	mustSend(t, c, proto.TypeKey, proto.Key{Scancode: 0x2E, Down: true}.Encode())
 	mustSend(t, c, proto.TypeKey, proto.Key{Scancode: 0x2E, Down: false}.Encode())
@@ -327,7 +327,7 @@ func TestSessionOutlivesHandshakeTimeout(t *testing.T) {
 }
 
 // TestMacThatLostItsPairingCanPairAgain covers a Mac whose stored secret is
-// gone — reinstalled, restored from backup, or migrated between stores — while
+// gone, reinstalled, restored from backup, or migrated between stores, while
 // the agent still believes it is paired. Without this the only way back is to
 // unpair physically at the PC, which is a dead end if the PC is not to hand.
 func TestMacThatLostItsPairingCanPairAgain(t *testing.T) {

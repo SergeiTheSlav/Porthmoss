@@ -1,10 +1,10 @@
 # Third-party notices
 
-The Mac app has no third-party dependencies: it is SwiftUI, CoreGraphics and
+The Mac app has no third-party dependencies. It is SwiftUI, CoreGraphics and
 Network, all of them Apple's. Everything below belongs to the Windows agent.
 
-The same list is shown in the About panel of the Mac app and in the About card
-of the agent's window, and is printed by `porthmoss-agent.exe --version`.
+The same list appears in the About panel of the Mac app, in the About card of
+the agent's window, and in `porthmoss-agent.exe --version`.
 
 | Project | What it does here | Licence |
 | --- | --- | --- |
@@ -16,7 +16,7 @@ of the agent's window, and is printed by `porthmoss-agent.exe --version`.
 | [golang.org/x/sys](https://pkg.go.dev/golang.org/x/sys) | the Win32 calls behind every injected keystroke | BSD 3-clause |
 
 Each project's full licence text ships in its own repository and in the Go
-module cache; `go mod download` followed by `go tool license` or a look in
-`$(go env GOMODCACHE)` will produce it verbatim.
+module cache. `go mod download` followed by a look in `$(go env GOMODCACHE)`
+produces it verbatim.
 
-Porthmoss itself is MIT licensed — see [LICENSE](LICENSE).
+Porthmoss itself is MIT licensed. See [LICENSE](LICENSE).

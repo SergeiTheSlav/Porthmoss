@@ -8,7 +8,7 @@ import (
 )
 
 // Logger is set once at startup so recovered panics reach the same place as
-// everything else — a log file, since a -H windowsgui build has no console for
+// everything else, a log file, since a -H windowsgui build has no console for
 // them to print to.
 var Logger *slog.Logger
 

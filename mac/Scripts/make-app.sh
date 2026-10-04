@@ -3,7 +3,7 @@
 #
 # The bundle is not optional. macOS grants Accessibility and Input Monitoring
 # to a code identity rather than to a path, so a bare binary inherits whatever
-# the launching terminal was granted — which is both wrong and confusing. A
+# the launching terminal was granted, which is both wrong and confusing. A
 # bundle with a stable identifier gets its own entry in System Settings, and
 # can be launched from Finder like anything else.
 set -euo pipefail
@@ -64,12 +64,12 @@ PLIST
 #
 # This matters more than it looks. macOS grants Accessibility and Input
 # Monitoring to a code identity, and an ad-hoc signature has none that is
-# stable — its hash changes on every build, so each rebuild silently revoked
+# stable, its hash changes on every build, so each rebuild silently revoked
 # both grants while System Settings still showed the switches as on.
 KEYCHAIN="$HOME/Library/Keychains/porthmoss-signing.keychain-db"
 # A build for somebody else is signed ad-hoc. The local identity is a
 # certificate that exists only in this keychain, so on another Mac it names an
-# authority the system has never heard of — worse than no authority at all.
+# authority the system has never heard of, worse than no authority at all.
 if [ "${PORTHMOSS_SIGN:-local}" = "adhoc" ]; then
     codesign --force --sign - --timestamp=none "$APP"
     echo "Built $APP (ad-hoc signed, for distribution)"

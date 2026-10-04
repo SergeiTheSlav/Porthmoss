@@ -34,7 +34,7 @@ type input struct {
 }
 
 // Compile-time assertion that our INPUT matches Windows'. A mismatch would make
-// SendInput read garbage, and there is no way to catch that from a Mac — so it
+// SendInput read garbage, and there is no way to catch that from a Mac, so it
 // is caught by the cross-compiler instead. Both arrays are zero-length only
 // when the sizes are equal; either direction of drift is a negative length.
 var (
@@ -82,7 +82,7 @@ const (
 
 // Windows injector uses SendInput, which needs no driver and no elevation for
 // ordinary desktop apps. It cannot reach the secure desktop (UAC prompts, the
-// lock screen, Ctrl+Alt+Del) — that is a documented limitation, not a bug.
+// lock screen, Ctrl+Alt+Del), that is a documented limitation, not a bug.
 type Windows struct {
 	heldKeys    map[uint16]bool // scancode -> extended
 	heldButtons map[byte]bool
@@ -166,7 +166,7 @@ func (w *Windows) MoveTo(x, y uint16) error {
 	// Only the virtual-desktop rectangle is needed here, and it comes from
 	// GetSystemMetrics with no callback. Calling Screens() on every movement
 	// was fatal: it allocates a syscall callback each time, and those come
-	// from a fixed pool that is never freed — a few thousand mouse moves and
+	// from a fixed pool that is never freed, a few thousand mouse moves and
 	// the process dies with "too many callback functions".
 	virtual := w.virtualBounds()
 

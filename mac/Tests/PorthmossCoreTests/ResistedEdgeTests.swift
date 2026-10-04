@@ -6,7 +6,7 @@ import Testing
 /// This is what makes it possible to put the PC past the *inner* edge of two
 /// side-by-side screens. It needs its own rules, because the window server has
 /// already moved the pointer onto the neighbouring display by the time the
-/// second movement arrives — so without holding the cursor still, the push can
+/// second movement arrives, so without holding the cursor still, the push can
 /// never add up and the crossing simply never fires.
 ///
 /// The cost is that the ordinary way of reaching that neighbour runs into
@@ -102,7 +102,7 @@ struct ResistedEdgeTests {
 
         // Back into the middle of the screen, then at the edge again. Having
         // given up once must not disable the crossing for the rest of the
-        // session — the pointer only passed through to look at something.
+        // session, the pointer only passed through to look at something.
         _ = model.mouseMoved(cursor: Point(x: 700, y: 491), delta: Point(x: -40, y: 0), now: 2.0)
 
         var crossed = false

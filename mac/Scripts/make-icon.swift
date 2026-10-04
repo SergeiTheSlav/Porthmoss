@@ -6,8 +6,8 @@ import UniformTypeIdentifiers
 
 // The app icon: a river.
 //
-// The background is Termoss's — the same dark slate squircle, the same
-// gradient, the same lit top edge — so the two apps read as a pair on the
+// The background is Termoss's, the same dark slate squircle, the same
+// gradient, the same lit top edge, so the two apps read as a pair on the
 // Dock. The artwork follows Termoss's rule too: flat, saturated shapes, no
 // gradients inside the glyph.
 //

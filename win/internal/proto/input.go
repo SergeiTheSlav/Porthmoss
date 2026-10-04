@@ -98,8 +98,8 @@ func DecodeU64(b []byte) (uint64, error) {
 }
 
 // FileFlagClipboard marks a batch that came from the sender's clipboard
-// rather than from a drag. The receiver still writes the files to disk — it
-// has to put them somewhere — but also puts them on its own clipboard, so the
+// rather than from a drag. The receiver still writes the files to disk, it
+// has to put them somewhere, but also puts them on its own clipboard, so the
 // user's next paste produces the files rather than nothing.
 const FileFlagClipboard = 1 << 0
 

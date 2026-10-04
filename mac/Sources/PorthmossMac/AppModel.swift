@@ -78,7 +78,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var displays: [Display] = Displays.all()
     /// Whether this Mac is driving the PC. A typed state rather than a
     /// prefix match on the status line, which used to mean every message that
-    /// was not "Controlling…" read as control having come home — a file
+    /// was not "Controlling…" read as control having come home, a file
     /// transfer reporting "Sending…" flipped the menu bar mid-session.
     @Published private(set) var direction: ControlDirection = .none
 
@@ -95,7 +95,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var settings: Settings
 
     /// What the settings panel is editing. Kept separate so a half-made change
-    /// — a slider mid-drag, an edge picked by mistake — does not take effect
+    ///, a slider mid-drag, an edge picked by mistake, does not take effect
     /// under the user's hands, and so Apply has something to confirm.
     @Published var draft: Settings
 
@@ -134,8 +134,8 @@ final class AppModel: ObservableObject {
         }
     }
 
-    // Held for the life of the process — this model is the app's single
-    // @StateObject — so there is nothing to unregister.
+    // Held for the life of the process, this model is the app's single
+    // @StateObject, so there is nothing to unregister.
     private var screenObserver: NSObjectProtocol?
 
     private func displaysChanged() {
@@ -150,7 +150,7 @@ final class AppModel: ObservableObject {
     }
 
     /// True when the chosen edge of this display has another of the Mac's own
-    /// displays beyond it — a choice worth warning about, because it costs the
+    /// displays beyond it, a choice worth warning about, because it costs the
     /// ordinary way of reaching that display.
     func hasDisplayBeyond(_ display: Display, edge: ScreenEdge) -> Bool {
         !Displays.isFree(display, edge: edge, among: displays)
@@ -201,7 +201,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// The address is not a staged setting — picking a PC is the action, not
+    /// The address is not a staged setting, picking a PC is the action, not
     /// something to confirm afterwards.
     private func target(_ host: String, _ port: UInt16) {
         settings.agentHost = host

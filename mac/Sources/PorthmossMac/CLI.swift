@@ -22,7 +22,7 @@ enum CLI {
 
         func usage() -> Never {
             print("""
-            porthmoss — control a Windows PC from this Mac
+            porthmoss, control a Windows PC from this Mac
 
             USAGE
               porthmoss [options]
@@ -72,8 +72,7 @@ enum CLI {
                 settings.capture.edge = edge
             case "--display":
                 let wanted = value(arg)
-                // Match on id first — that is what the settings file holds —
-                // then on name, case-insensitively, so "studio" is enough.
+                // Match on id first, that is what the settings file holds,                // then on name, case-insensitively, so "studio" is enough.
                 let displays = Displays.all()
                 guard let display = displays.first(where: { $0.id == wanted })
                         ?? displays.first(where: {
@@ -126,7 +125,7 @@ enum CLI {
             print("Pass --display <name> to pick one. An edge that is not free")
             print("has another of this Mac's screens beyond it: crossing there")
             print("still works, but it costs the ordinary way of reaching that")
-            print("screen — a pause mid-push lets the pointer through instead.")
+            print("screen, a pause mid-push lets the pointer through instead.")
             exit(0)
         }
 
@@ -167,7 +166,7 @@ enum CLI {
             if agents.isEmpty {
                 print("None found. Check the agent is running and both machines are on the same network.")
             }
-            for agent in agents { print("  \(agent.name) — \(agent.host):\(agent.port)") }
+            for agent in agents { print("  \(agent.name), \(agent.host):\(agent.port)") }
             exit(0)
         }
 
@@ -234,7 +233,7 @@ enum CLI {
                             name: "", secret: secret, fingerprint: fingerprint
                         )
                         } catch {
-                            print("warning: could not store the pairing — \(error.localizedDescription)")
+                            print("warning: could not store the pairing, \(error.localizedDescription)")
                         }
                         print("""
                         Connected to \(agentHost). \

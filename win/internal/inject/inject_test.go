@@ -24,7 +24,7 @@ func norm(pixel, size float64) uint16 {
 //
 // The coordinates on the wire are absolute, but the PC's own mouse stays live
 // while the Mac drives it. Placing the pointer at the absolute position would
-// undo whatever the user's hand just did — they nudge it, the next message
+// undo whatever the user's hand just did, they nudge it, the next message
 // snaps it back, and the cursor visibly teleports. Applying the difference
 // instead means both mice move one cursor.
 func TestBothMiceMoveOneCursor(t *testing.T) {
@@ -56,7 +56,7 @@ func TestBothMiceMoveOneCursor(t *testing.T) {
 		t.Errorf("pointer x = %.0f, want 400", x)
 	}
 	if !near(y, 150) {
-		t.Errorf("pointer y = %.0f, want 150 — the PC's own movement was undone", y)
+		t.Errorf("pointer y = %.0f, want 150, the PC's own movement was undone", y)
 	}
 }
 

@@ -1,6 +1,6 @@
 import Foundation
 
-/// The Porthmoss v1 wire protocol. Mirrors `win/internal/proto` — see
+/// The Porthmoss v1 wire protocol. Mirrors `win/internal/proto`, see
 /// `docs/protocol.md`. Everything is big-endian.
 public enum Wire {
     public static let version: UInt16 = 1
@@ -56,8 +56,8 @@ public enum WireError: Error, Equatable, LocalizedError {
     case versionMismatch(UInt16)
     case rejected(String)
 
-    /// Without this, anything that falls back to `localizedDescription` — a
-    /// dropped connection, say — surfaces as "WireError error 3", which tells
+    /// Without this, anything that falls back to `localizedDescription`, a
+    /// dropped connection, say, surfaces as "WireError error 3", which tells
     /// the user nothing at all.
     public var errorDescription: String? {
         switch self {
@@ -161,8 +161,7 @@ public extension Wire {
     /// FILE_BEGIN: the name, the size, and where this file sits in the batch
     /// so the receiver can say "2 of 5" rather than counting.
     /// Set when the batch came from the sender's clipboard rather than a drag.
-    /// The receiver writes the files either way — they have to go somewhere —
-    /// but a clipboard batch also lands on its clipboard, so the next paste
+    /// The receiver writes the files either way, they have to go somewhere,    /// but a clipboard batch also lands on its clipboard, so the next paste
     /// produces the files rather than nothing.
     static let fileFlagClipboard: UInt8 = 1 << 0
 

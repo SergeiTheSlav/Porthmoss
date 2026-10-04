@@ -6,9 +6,9 @@ import PorthmossCore
 /// Ties the event tap, the crossing model and the connection together.
 ///
 /// Everything here runs on the main run loop, which is also where the event tap
-/// callback fires — so no locking, and no latency spent hopping queues on the
+/// callback fires, so no locking, and no latency spent hopping queues on the
 /// input hot path.
-// Unchecked because every member is touched only from the main run loop — the
+// Unchecked because every member is touched only from the main run loop, the
 // event tap callback fires there, and the connection's callbacks hop back to it
 // before touching anything here.
 final class Session: @unchecked Sendable {
@@ -49,7 +49,7 @@ final class Session: @unchecked Sendable {
         tap.onTimeout = { [weak self] count in
             // The tap only stalls if this callback is slow. If it ever shows up
             // in the field, the input path needs to get off the callback thread.
-            self?.onEvent(.note("warning: event tap stalled and was re-enabled (\(count)x) — "
+            self?.onEvent(.note("warning: event tap stalled and was re-enabled (\(count)x), "
                 + "some input may have reached the Mac instead of the PC"))
         }
         try tap.start()
@@ -92,8 +92,8 @@ final class Session: @unchecked Sendable {
 
     /// Takes new settings without tearing the link down.
     ///
-    /// Everything here is applied on the Mac — which edge leads to the PC, how
-    /// hard to push, the modifier mapping — so there is nothing to renegotiate
+    /// Everything here is applied on the Mac, which edge leads to the PC, how
+    /// hard to push, the modifier mapping, so there is nothing to renegotiate
     /// with the agent and no reason to make the user reconnect.
     func apply(_ new: Settings) {
         // Changing the edge while the PC is being driven would leave the
@@ -101,7 +101,7 @@ final class Session: @unchecked Sendable {
         if new.capture.edge != settings.capture.edge
             || new.crossingDisplay != settings.crossingDisplay, model.isRemote {
             releaseControl(model.forceReturn(), announce: false)
-            onEvent(.stoppedDrivingPC("Settings applied — control returned to the Mac."))
+            onEvent(.stoppedDrivingPC("Settings applied, control returned to the Mac."))
         }
         settings = new
         model.config = new.capture
@@ -129,7 +129,7 @@ final class Session: @unchecked Sendable {
 
             // The dead-man switch, in both directions. Whichever machine is
             // driving, a link that has gone quiet must not leave the user
-            // stranded — and the two failures are not symmetric in how bad
+            // stranded, and the two failures are not symmetric in how bad
             // they are. Driving the PC and losing the link leaves the Mac
             // without a cursor; *being* driven and losing the link leaves
             // whatever the PC was holding down held, so every key the user
@@ -145,7 +145,7 @@ final class Session: @unchecked Sendable {
     private func panic(_ reason: String) {
         if model.isRemote {
             releaseControl(model.forceReturn(), announce: false)
-            onEvent(.stoppedDrivingPC("Control returned to the Mac — \(reason)."))
+            onEvent(.stoppedDrivingPC("Control returned to the Mac, \(reason)."))
         } else {
             onEvent(.note("\(reason.prefix(1).uppercased())\(reason.dropFirst())."))
         }
@@ -447,7 +447,7 @@ final class Session: @unchecked Sendable {
     }
 
     /// The display whose configured edge leads to the PC, if the cursor is on
-    /// it — and `nil` for every other movement, which is most of them.
+    /// it, and `nil` for every other movement, which is most of them.
     ///
     /// With a display chosen by hand, that one is the only way across, even
     /// where the edge it was chosen for has another Mac display beyond it.

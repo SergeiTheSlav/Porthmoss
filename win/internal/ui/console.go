@@ -34,7 +34,7 @@ func (c *Console) Update(state State) {
 	}
 	if state.Title != c.last.Title || state.Detail != c.last.Detail {
 		if state.Detail != "" {
-			fmt.Printf("%s — %s\n", state.Title, state.Detail)
+			fmt.Printf("%s, %s\n", state.Title, state.Detail)
 		} else {
 			fmt.Println(state.Title)
 		}

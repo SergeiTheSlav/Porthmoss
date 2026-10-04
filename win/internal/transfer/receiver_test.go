@@ -13,7 +13,7 @@ import (
 // the other machine sends, the result either fails or is a single path
 // component that lands inside the download directory.
 //
-// Rejecting is not the only safe answer, and mostly not the right one — a name
+// Rejecting is not the only safe answer, and mostly not the right one, a name
 // with a directory in it is reduced to its last component, which is what a
 // browser does with Content-Disposition. What must never happen is a result
 // that still contains a separator, or that resolves upwards.
@@ -99,7 +99,7 @@ func TestSafeNameNormalisesTrailingPunctuation(t *testing.T) {
 }
 
 func TestSafeNameStripsDirectories(t *testing.T) {
-	// A name with a directory in it is not rejected outright — only the last
+	// A name with a directory in it is not rejected outright, only the last
 	// component is kept, which is what a browser does with Content-Disposition.
 	for name, want := range map[string]string{
 		"folder/report.pdf": "report.pdf",

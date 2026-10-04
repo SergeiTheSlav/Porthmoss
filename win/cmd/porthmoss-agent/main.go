@@ -321,7 +321,7 @@ func openLogFile(stateDir string) *os.File {
 		return nil
 	}
 	// Keep the previous run's log before starting a fresh one. When the agent
-	// dies and is relaunched, the crash is in the *previous* run — truncating
+	// dies and is relaunched, the crash is in the *previous* run, truncating
 	// on every start would erase exactly the thing worth reading.
 	path := filepath.Join(stateDir, "porthmoss.log")
 	os.Rename(path, path+".1")

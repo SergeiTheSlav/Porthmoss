@@ -5,7 +5,7 @@ import Foundation
 /// This was a string, and the app recovered from a dropped PC by matching the
 /// prefix of a human-readable sentence. Two things were wrong with that:
 /// rewording a message silently broke the release path, and every message that
-/// was *not* "Controlling…" was read as "no longer controlling" — so dragging a
+/// was *not* "Controlling…" was read as "no longer controlling", so dragging a
 /// file across, which reports "Sending…", flipped the menu bar back mid-session.
 enum SessionEvent {
     /// The link is up and idle.

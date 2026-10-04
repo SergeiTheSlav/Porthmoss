@@ -43,7 +43,7 @@ const (
 
 	// File transfer. One file at a time, in order: BEGIN, then CHUNK until the
 	// declared size has arrived, then END. ABORT may replace END at any point.
-	// Deliberately not interleaved — two files at once would need stream ids
+	// Deliberately not interleaved, two files at once would need stream ids
 	// and a scheduler, to save a user dragging a folder about half a second.
 	TypeFileBegin = 0x60
 	TypeFileChunk = 0x61

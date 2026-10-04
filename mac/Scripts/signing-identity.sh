@@ -2,8 +2,8 @@
 # Creates a stable, local code-signing identity for Porthmoss.
 #
 # Why this exists: macOS grants Accessibility and Input Monitoring to a code
-# identity. An ad-hoc signature has no stable identity — its hash changes on
-# every build — so each rebuild silently revoked both permissions while System
+# identity. An ad-hoc signature has no stable identity, its hash changes on
+# every build, so each rebuild silently revoked both permissions while System
 # Settings still showed the switches as on. That is unusable for an app you are
 # actively developing, and it produced a working mouse with a dead keyboard,
 # because the two permissions fail differently.

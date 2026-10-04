@@ -38,7 +38,7 @@ const (
 // go vet's unsafeptr check flags this, and is right to in the general case: a
 // uintptr is not a reference the garbage collector can see, so heap memory
 // could move out from under it. It is safe here because the memory came from
-// GlobalAlloc and lives outside the Go heap entirely — there is nothing for
+// GlobalAlloc and lives outside the Go heap entirely, there is nothing for
 // the collector to move or reclaim. Isolated in one place so the exception is
 // visible rather than scattered.
 func at[T any](address uintptr) *T {
@@ -93,7 +93,7 @@ func (Windows) Text() (string, error) {
 	// Read a bounded slice rather than walking to a null terminator with
 	// UTF16PtrToString. A clipboard buffer written by a misbehaving app may not
 	// be terminated, and walking past the allocation is an access violation
-	// that ends the process outright — no Go panic to recover from. GlobalSize
+	// that ends the process outright, no Go panic to recover from. GlobalSize
 	// gives the allocation length; anything oversized is refused before it is
 	// even decoded.
 	size, _, _ := procGlobalSize.Call(handle)

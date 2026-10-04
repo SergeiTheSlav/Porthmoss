@@ -5,7 +5,7 @@ import IOKit.hid
 /// The two TCC grants the event tap needs, checked separately.
 ///
 /// They are genuinely different permissions in different System Settings
-/// panes, and a tap fails identically whichever one is missing — so telling
+/// panes, and a tap fails identically whichever one is missing, so telling
 /// the user "grant both" when they have already granted one is useless.
 enum Permissions {
     enum Status {

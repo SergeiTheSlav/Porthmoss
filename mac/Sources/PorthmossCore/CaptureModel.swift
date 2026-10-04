@@ -43,7 +43,7 @@ public struct CaptureConfig: Sendable, Equatable {
     /// back can hand control home again.
     ///
     /// You arrive pinned against the entry edge, which means the return
-    /// gesture is already satisfied the moment you land — a couple of leftward
+    /// gesture is already satisfied the moment you land, a couple of leftward
     /// movements would eject you straight back, and the resulting flapping
     /// looks like the Mac cursor moving on its own. Control only becomes
     /// returnable once you have actually gone somewhere.
@@ -57,8 +57,8 @@ public struct CaptureConfig: Sendable, Equatable {
     /// and the crossing simply never fires. Holding the cursor still gives it
     /// somewhere to accumulate.
     ///
-    /// The cost is that the ordinary way of reaching that neighbour — just
-    /// moving onto it — now meets resistance, so pausing mid-push gives up
+    /// The cost is that the ordinary way of reaching that neighbour, just
+    /// moving onto it, now meets resistance, so pausing mid-push gives up
     /// and lets the pointer through. See `resistanceGivenUp`.
     public var resistAtEdge = false
 
@@ -80,8 +80,8 @@ public enum CaptureAction: Equatable, Sendable {
 
 /// The edge-crossing state machine.
 ///
-/// It is deliberately free of CoreGraphics so the crossing rules — which are
-/// most of what makes this feel good or awful — can be tested directly.
+/// It is deliberately free of CoreGraphics so the crossing rules, which are
+/// most of what makes this feel good or awful, can be tested directly.
 public final class CaptureModel {
     public private(set) var isRemote = false
     /// Where the cursor is on the Windows desktop, in its virtual-desktop pixels.
@@ -126,7 +126,7 @@ public final class CaptureModel {
         isRemote ? moveWhileRemote(delta: delta, now: now) : maybeCross(cursor: cursor, delta: delta, now: now)
     }
 
-    /// Forces control back to the Mac — used by the panic hotkey and whenever
+    /// Forces control back to the Mac, used by the panic hotkey and whenever
     /// the connection drops.
     public func forceReturn() -> CaptureAction? {
         guard isRemote else { return nil }
@@ -244,7 +244,7 @@ public final class CaptureModel {
         }
 
         // Movement back towards the Mac only counts once the cursor is already
-        // pinned against the entry edge of the Windows desktop — and only once
+        // pinned against the entry edge of the Windows desktop, and only once
         // it has been somewhere else first.
         let pinned = returnArmed && isPinnedToEntryEdge()
         let inward = -outwardComponent(of: scaled)
@@ -270,7 +270,7 @@ public final class CaptureModel {
         return .moveRemote(x: x, y: y)
     }
 
-    /// The Windows desktop edge the cursor arrived through — crossing the Mac's
+    /// The Windows desktop edge the cursor arrived through, crossing the Mac's
     /// right edge means entering Windows from its left.
     private func isPinnedToEntryEdge() -> Bool {
         let virtual = screens.virtualDesktop

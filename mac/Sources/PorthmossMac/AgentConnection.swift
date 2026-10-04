@@ -7,7 +7,7 @@ import PorthmossCore
 ///
 /// The agent's certificate is self-signed, so the usual PKI checks are
 /// meaningless. Instead we pin its SHA-256 fingerprint on first pairing and
-/// refuse anything else afterwards — an unauthenticated input channel is total
+/// refuse anything else afterwards, an unauthenticated input channel is total
 /// remote control of the PC, so this is the load-bearing part.
 final class AgentConnection: @unchecked Sendable {
     enum State: Sendable {
@@ -21,8 +21,7 @@ final class AgentConnection: @unchecked Sendable {
 
     /// Frames that arrived before the session was wired up.
     ///
-    /// The agent can send its first message immediately after the handshake —
-    /// the probe sends ENTER about a millisecond later — while the Mac only
+    /// The agent can send its first message immediately after the handshake,    /// the probe sends ENTER about a millisecond later, while the Mac only
     /// installs its handlers once Session.start() runs. Without this those
     /// frames land on a default no-op and vanish, and losing ENTER in
     /// particular means the Mac is being driven without knowing it: its own
@@ -132,7 +131,7 @@ final class AgentConnection: @unchecked Sendable {
         // fingerprints inline crowded out the sentence that actually tells the
         // user what to do.
         return WireError.rejected("""
-        \(host) is not the PC this Mac paired with — it presented a different \
+        \(host) is not the PC this Mac paired with, it presented a different \
         identity.
 
         If you reset Porthmoss on that PC, forget it here and pair again. If \
@@ -200,8 +199,8 @@ final class AgentConnection: @unchecked Sendable {
             case let .failure(error):
                 completion(.failure(error))
             case let .success(frame):
-                // The agent refuses some connections outright — a second Mac,
-                // say — and says why. Reporting "expected CHALLENGE" instead
+                // The agent refuses some connections outright, a second Mac,
+                // say, and says why. Reporting "expected CHALLENGE" instead
                 // of its message helps nobody.
                 if frame.type == Wire.MessageType.error.rawValue {
                     return completion(.failure(WireError.rejected(

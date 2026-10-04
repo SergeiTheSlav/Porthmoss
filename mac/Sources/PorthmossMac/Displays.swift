@@ -4,7 +4,7 @@ import PorthmossCore
 
 /// One of the Mac's displays.
 ///
-/// In Quartz global coordinates — origin top-left, matching what CGEvent
+/// In Quartz global coordinates, origin top-left, matching what CGEvent
 /// reports, deliberately not AppKit's flipped space.
 struct Display: Identifiable, Equatable, Sendable {
     /// Stable enough to write into a settings file and still mean the same
@@ -49,7 +49,7 @@ enum Displays {
     }
 
     /// An identifier built from what the monitor says about itself, rather
-    /// than from its `CGDirectDisplayID` — which is handed out afresh on every
+    /// than from its `CGDirectDisplayID`, which is handed out afresh on every
     /// boot and would make a saved choice point at a different screen.
     private static func identifier(of id: CGDirectDisplayID) -> String {
         "\(CGDisplayVendorNumber(id))-\(CGDisplayModelNumber(id))-\(CGDisplaySerialNumber(id))"
@@ -82,14 +82,14 @@ enum Displays {
     /// boundary unless the user has explicitly asked for it to lead to the PC.
     ///
     /// It has to be actual geometry rather than a comparison against the
-    /// bounding box of the whole desktop. On the common arrangement — a
-    /// laptop with an external screen stacked above it — the box extends past
+    /// bounding box of the whole desktop. On the common arrangement, a
+    /// laptop with an external screen stacked above it, the box extends past
     /// the laptop's left and right edges, so a box comparison declares both of
     /// them blocked and leaves the built-in display with no usable edge but
     /// the bottom one, although there is plainly nothing to the laptop's
     /// right. What matters is whether another display actually occupies the
     /// space the pointer would move into, which means overlapping the span of
-    /// this edge — touching along it, as stacked displays do, is not overlap.
+    /// this edge, touching along it, as stacked displays do, is not overlap.
     static func isFree(_ display: Display, edge: ScreenEdge, among displays: [Display]) -> Bool {
         !displays.contains { other in
             guard other.id != display.id else { return false }
@@ -108,8 +108,7 @@ enum Displays {
     }
 
     /// Whether two one-dimensional spans share any length at all. Displays
-    /// that merely touch — which is how every tidy arrangement is set up —
-    /// share none.
+    /// that merely touch, which is how every tidy arrangement is set up,    /// share none.
     private static func overlap(_ a0: Double, _ a1: Double, _ b0: Double, _ b1: Double) -> Bool {
         min(a1, b1) - max(a0, b0) > 0
     }

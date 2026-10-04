@@ -167,7 +167,7 @@ func (s *Server) handle(ctx context.Context, conn net.Conn) error {
 	}
 
 	// Drop the handshake deadline. SetDeadline set a *write* deadline too, and
-	// the loop below only ever refreshes the read side — leaving it in place
+	// the loop below only ever refreshes the read side, leaving it in place
 	// makes every session die once it outlives handshakeTimeout, and because a
 	// timeout can land midway through a TLS record, the peer sees stream
 	// corruption ("bad MAC") rather than a clean disconnect.
@@ -295,7 +295,7 @@ func (s *Server) handshake(conn net.Conn) (string, error) {
 // expectedSecret returns the secret the peer must prove, and whether a pairing
 // code is in play (in which case the secret is derived from the displayed code).
 //
-// macRequestsPairing covers a Mac that has lost its half of the pairing — a
+// macRequestsPairing covers a Mac that has lost its half of the pairing, a
 // reinstall, or restored-from-backup. Honouring it means anyone on the network
 // can make a code appear on the PC, which is a nuisance and nothing more: the
 // code still has to be read off that screen, and the existing pairing is only

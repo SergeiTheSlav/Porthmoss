@@ -51,8 +51,8 @@ dist: agent agent-arm64
 test: check-version test-go test-mac
 
 # The two halves are one product, so they must not report different versions.
-# Each side declares its own — the Mac app cannot import Go constants and the
-# agent cannot import Swift ones — which makes drifting apart the default
+# Each side declares its own, the Mac app cannot import Go constants and the
+# agent cannot import Swift ones, which makes drifting apart the default
 # unless something checks.
 check-version:
 	@mac_v=$$(sed -n 's/.*static let version = "\([^"]*\)".*/\1/p' \
@@ -65,7 +65,7 @@ check-version:
 	   echo "  win/internal/about/about.go" >&2; \
 	   exit 1; \
 	 fi; \
-	 echo "version $$mac_v on both sides" 
+	 echo "version $$mac_v on both sides"
 
 # End-to-end: does the Mac cursor stay put while the PC is being driven?
 # Needs a window server and moves the cursor for a second, so it is not part

@@ -175,16 +175,16 @@ a:hover { text-decoration: underline; }
 
 <div class="card">
   <h2>This PC</h2>
-  <div class="row"><span class="k">Listening on</span><span class="v mono" id="addr">—</span></div>
-  <div class="row"><span class="k">Display</span><span class="v" id="display">—</span></div>
+  <div class="row"><span class="k">Listening on</span><span class="v mono" id="addr">, </span></div>
+  <div class="row"><span class="k">Display</span><span class="v" id="display">, </span></div>
   <div class="row"><span class="k">Paired Mac</span><span class="v" id="peer">Not paired</span></div>
-  <div class="row stack"><span class="k">Identity</span><span class="v mono" id="fp">—</span></div>
+  <div class="row stack"><span class="k">Identity</span><span class="v mono" id="fp">, </span></div>
   <div class="footnote">Your Mac checks this identity on every connection and refuses if it changes.</div>
 </div>
 
 <div class="card hidden" id="file-card">
   <h2>Dragged over from your Mac</h2>
-  <div class="row"><span class="k">Latest</span><span class="v" id="last-file">—</span></div>
+  <div class="row"><span class="k">Latest</span><span class="v" id="last-file">, </span></div>
   <div class="actions" style="margin-top:10px">
     <button id="open-folder">Open folder</button>
   </div>
@@ -206,10 +206,10 @@ a:hover { text-decoration: underline; }
 
 <div class="card hidden" id="about-card">
   <h2>About <span id="about-version" style="font-weight:400;opacity:0.7"></span></h2>
-  <div class="row"><span class="k">Version</span><span class="v" id="ab-version">—</span></div>
-  <div class="row"><span class="k">Made by</span><span class="v" id="ab-author">—</span></div>
-  <div class="row"><span class="k">Licence</span><span class="v" id="ab-licence">—</span></div>
-  <div class="row"><span class="k">Source</span><span class="v"><a id="ab-repo" href="#">—</a></span></div>
+  <div class="row"><span class="k">Version</span><span class="v" id="ab-version">, </span></div>
+  <div class="row"><span class="k">Made by</span><span class="v" id="ab-author">, </span></div>
+  <div class="row"><span class="k">Licence</span><span class="v" id="ab-licence">, </span></div>
+  <div class="row"><span class="k">Source</span><span class="v"><a id="ab-repo" href="#">, </a></span></div>
   <h2 style="margin:14px 0 4px">Standing on</h2>
   <div id="ab-credits"></div>
   <div class="footnote">
@@ -224,14 +224,14 @@ function render(s) {
   el("title").textContent = s.title || "";
   el("sub").textContent = s.detail || "";
   el("dot").className = "dot " + (s.tone || "");
-  el("addr").textContent = s.address || "—";
-  el("display").textContent = s.display || "—";
+  el("addr").textContent = s.address || ", ";
+  el("display").textContent = s.display || ", ";
   el("peer").textContent = s.peer || "Not paired";
-  el("fp").textContent = s.fingerprint || "—";
+  el("fp").textContent = s.fingerprint || ", ";
   el("code").textContent = s.code || "------";
   el("pairing-card").classList.toggle("hidden", !s.code);
   el("unpair").disabled = !s.paired;
-  el("last-file").textContent = s.lastFile || "—";
+  el("last-file").textContent = s.lastFile || ", ";
   el("drop-dir").textContent = s.dropDir || "";
   el("file-card").classList.toggle("hidden", !s.lastFile);
   renderAbout(s.about);
@@ -244,12 +244,12 @@ function renderAbout(about) {
   aboutDone = true;
   const el = (id) => document.getElementById(id);
   el("about-version").textContent = about.version || "";
-  el("ab-version").textContent = about.version || "—";
-  el("ab-author").textContent = about.author || "—";
+  el("ab-version").textContent = about.version || ", ";
+  el("ab-author").textContent = about.author || ", ";
   el("ab-licence").textContent = [about.licence, about.copyright]
-    .filter(Boolean).join(" · ") || "—";
+    .filter(Boolean).join(" · ") || ", ";
   const repo = el("ab-repo");
-  repo.textContent = (about.repository || "").replace(/^https:\/\//, "") || "—";
+  repo.textContent = (about.repository || "").replace(/^https:\/\//, "") || ", ";
   repo.href = about.repository || "#";
   const list = el("ab-credits");
   list.textContent = "";

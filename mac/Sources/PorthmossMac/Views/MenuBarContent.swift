@@ -30,7 +30,7 @@ struct MenuBarContent: View {
 
         Divider()
 
-        Link("\(About.name) \(About.version) — source on GitHub",
+        Link("\(About.name) \(About.version), source on GitHub",
              destination: URL(string: About.repository)!)
 
         Button("Quit Porthmoss") { NSApplication.shared.terminate(nil) }

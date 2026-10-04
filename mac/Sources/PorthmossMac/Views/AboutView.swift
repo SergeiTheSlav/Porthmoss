@@ -5,7 +5,7 @@ import SwiftUI
 ///
 /// Reached by clicking the wordmark, and nowhere else. An open-source project
 /// that does not say whose it is, what licence it carries, or whose work it
-/// stands on is missing something — but nobody opens the app to read credits,
+/// stands on is missing something, but nobody opens the app to read credits,
 /// so this does not get a permanent row in a window that is otherwise all
 /// things you came here to do.
 struct AboutView: View {

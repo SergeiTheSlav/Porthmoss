@@ -17,7 +17,7 @@ struct MainWindow: View {
         .task {
             // Reconnect to the PC most recently paired with, and otherwise go
             // looking. Opening the app and then having to press Connect every
-            // time is a step that never had a reason to exist — and keying off
+            // time is a step that never had a reason to exist, and keying off
             // the saved list rather than settings means it never tries a PC
             // this Mac can no longer authenticate to.
             if let recent = model.saved.first {
@@ -29,7 +29,7 @@ struct MainWindow: View {
             }
         }
         // onDismiss is the important half. Escape, or a click outside, clears
-        // the binding without going through Cancel — which left the handshake
+        // the binding without going through Cancel, which left the handshake
         // blocked on a code that could no longer be typed, the status stuck on
         // "Pairing…", and no way to bring the sheet back.
         .sheet(item: $model.pairingRequest, onDismiss: { model.cancelPairing() }) { request in
@@ -42,7 +42,7 @@ struct MainWindow: View {
 
 /// The wordmark, and the way to the credits.
 ///
-/// πορθμός is Greek for a strait — the narrow water between two shores. The
+/// πορθμός is Greek for a strait, the narrow water between two shores. The
 /// doubled final sigma is deliberate: it mirrors the doubled s in Porthmoss,
 /// so the mark and the product name end the same way. Set quietly, in
 /// half-transparent grey, so it reads as a mark rather than as another piece
@@ -140,7 +140,7 @@ private struct StatusPanel: View {
     }
 
     /// A failure carries its own explanation, and that explanation is the most
-    /// useful thing on screen — showing only `statusLine` here meant the reason
+    /// useful thing on screen, showing only `statusLine` here meant the reason
     /// was computed and then silently dropped.
     private var detail: String {
         if case let .failed(reason) = model.state { return reason }
@@ -356,7 +356,7 @@ private struct CrossingPanel: View {
     }
 
     /// With two screens attached, "push the right edge" does not say which
-    /// right edge — so name the screen whenever there is a choice to be made.
+    /// right edge, so name the screen whenever there is a choice to be made.
     private var crossingHint: String {
         let edge = model.settings.capture.edge.rawValue
         if let display = model.displays.first(where: { $0.id == model.settings.crossingDisplay }) {

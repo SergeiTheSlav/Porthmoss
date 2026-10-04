@@ -7,7 +7,7 @@
 #     else has to run on Intel too.
 #   * Ad-hoc signed. The local signing identity is a certificate that exists
 #     only in this keychain, so elsewhere it names an authority the system has
-#     never heard of — worse than claiming none.
+#     never heard of, worse than claiming none.
 #   * It carries the Windows agent. The Mac app on its own does nothing at all;
 #     shipping it alone would be shipping half a product.
 set -euo pipefail
@@ -44,7 +44,7 @@ Porthmoss
 =========
 
 Control a Windows PC from your Mac. Push the cursor past the edge of the
-Mac's screen and your mouse and keyboard land on the PC instead — it keeps
+Mac's screen and your mouse and keyboard land on the PC instead, it keeps
 its own display, running its own desktop. No video is streamed, so there is
 no lag and no bandwidth cost.
 
@@ -57,7 +57,7 @@ Both machines must be on the same network.
 Drag Porthmoss to the Applications folder.
 
 The first launch needs one extra step, because the app is not notarised by
-Apple — that needs a paid developer account. Double-clicking will refuse.
+Apple, that needs a paid developer account. Double-clicking will refuse.
 
   On macOS 15 (Sequoia) and later:
     Open it once and let it be blocked. Then go to
@@ -75,8 +75,8 @@ Either way, only the first time.
 
 Porthmoss needs BOTH of these in System Settings > Privacy & Security:
 
-  * Accessibility      — to move your cursor and send keystrokes
-  * Input Monitoring    — to see the keyboard at all
+  * Accessibility      to move your cursor and send keystrokes
+  * Input Monitoring    to see the keyboard at all
 
 Both are required, and they are separate lists. With only Accessibility
 granted, the mouse works and the keyboard silently does nothing.
@@ -108,8 +108,8 @@ asks for the six digits the PC is showing. That happens once per PC.
 Using it
 --------
 
-Push the cursor firmly against the right edge of your Mac's screen — a
-deliberate shove, not a brush — and it appears on the PC. Push back at the
+Push the cursor firmly against the right edge of your Mac's screen, a
+deliberate shove, not a brush, and it appears on the PC. Push back at the
 far edge to come home, or press Control-Option-Command-P at any time.
 
 Which edge leads to the PC is in Settings, along with pointer speed and how
@@ -118,7 +118,7 @@ hard the push has to be.
 With two screens attached, Settings also asks WHICH screen's edge leads to
 the PC. By default any edge with nothing of the Mac's own beyond it will do,
 which is ambiguous as soon as two screens both have a free edge on the same
-side — so pick one by name and there is exactly one way across.
+side, so pick one by name and there is exactly one way across.
 
   * Cmd becomes Ctrl on the PC, so Cmd-C and Cmd-T keep working.
   * Copy and paste crosses over, text and files both ways.

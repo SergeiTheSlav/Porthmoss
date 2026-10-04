@@ -4,7 +4,7 @@ import Foundation
 /// A global CGEventTap that can *swallow* events.
 ///
 /// `NSEvent.addGlobalMonitorForEvents` can observe input but never consume it,
-/// which is useless here — while the Mac is driving Windows, its own cursor and
+/// which is useless here, while the Mac is driving Windows, its own cursor and
 /// keyboard must not react. A head-inserted HID tap is the only API that can do
 /// both, and it needs Accessibility *and* Input Monitoring permission.
 final class EventTap {

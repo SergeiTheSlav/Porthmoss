@@ -23,7 +23,7 @@ type Clipboard interface {
 // that exists to carry keystrokes.
 const MaxText = 256 * 1024
 
-// Files is a clipboard that can also hold a list of file paths — CF_HDROP on
+// Files is a clipboard that can also hold a list of file paths, CF_HDROP on
 // Windows, file URLs on macOS. Copying files in a file manager puts them here,
 // and that is the only way to get at a set of files the user has chosen
 // without watching a drag, which no application is allowed to do from outside

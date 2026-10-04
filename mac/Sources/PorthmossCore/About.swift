@@ -16,7 +16,7 @@ public enum About {
 
     /// One line, for a window title bar or a log header.
     public static var summary: String {
-        "\(name) \(version) — \(licence) licence — \(repository)"
+        "\(name) \(version), \(licence) licence, \(repository)"
     }
 
     /// Something the project is built on and owes a mention to.
@@ -39,7 +39,7 @@ public enum About {
     }
 
     /// Everything the Windows agent links in. The Mac app has no third-party
-    /// dependencies at all — it is SwiftUI, CoreGraphics and Network — so this
+    /// dependencies at all, it is SwiftUI, CoreGraphics and Network, so this
     /// list is the agent's, and is shown on both sides because the two halves
     /// are one product.
     public static let acknowledgements: [Credit] = [

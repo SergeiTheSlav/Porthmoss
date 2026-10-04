@@ -55,8 +55,8 @@ const (
 //
 // Threading is the delicate part. systray locks the main OS thread in its own
 // init and owns the main message loop, so the WebView gets a dedicated locked
-// thread with a message loop of its own. That is ordinary Win32 — windows
-// belong to the thread that created them — but it does mean every call into
+// thread with a message loop of its own. That is ordinary Win32, windows
+// belong to the thread that created them, but it does mean every call into
 // the view has to go through Dispatch.
 type WindowsUI struct {
 	opts Options
@@ -85,7 +85,7 @@ func (w *WindowsUI) Run() error {
 	systray.Run(func() {
 		systray.SetIcon(trayIcon)
 		systray.SetTitle("Porthmoss")
-		systray.SetTooltip("Porthmoss — waiting for your Mac")
+		systray.SetTooltip("Porthmoss, waiting for your Mac")
 
 		open := systray.AddMenuItem("Open Porthmoss", "Show the Porthmoss window")
 		open.Click(w.Show)
@@ -185,8 +185,8 @@ func (w *WindowsUI) runWebView() {
 
 	// Run returns once the window is destroyed, and the deferred Destroy above
 	// then releases the WebView2 objects. Anything still holding this pointer
-	// would be calling into freed COM the next time the state changed — a
-	// session connecting, a file arriving — so it must not outlive the loop.
+	// would be calling into freed COM the next time the state changed, a
+	// session connecting, a file arriving, so it must not outlive the loop.
 	w.mu.Lock()
 	w.view = nil
 	w.hwnd = 0
@@ -198,7 +198,7 @@ func (w *WindowsUI) runWebView() {
 // This is a tray application: closing the window should put it away, not tear
 // down the interface for the rest of the session. Destroying it also ended the
 // message loop, after which every state update dispatched into released COM
-// objects and took the process with it — which is why the agent kept dying
+// objects and took the process with it, which is why the agent kept dying
 // shortly after the window was "minimised".
 func hideOnClose(hwnd uintptr) {
 	var previous uintptr
@@ -271,7 +271,7 @@ func (w *WindowsUI) Update(state State) {
 	w.mu.Unlock()
 
 	// Only when the text actually changes. Update runs on whichever goroutine
-	// happened to change the state — the server's, a file arriving — and every
+	// happened to change the state, the server's, a file arriving, and every
 	// call here is a cross-thread Shell_NotifyIcon. Doing it on every state
 	// change meant doing it for reasons that never altered a single character.
 	if changedTip {
@@ -290,7 +290,7 @@ func (w *WindowsUI) Update(state State) {
 	case state.Controlled && !previous.Controlled:
 		// SendInput delivers keystrokes to whatever window is in front. If
 		// that is this one, every key the Mac sends lands in a status page
-		// with nowhere to put it — the mouse still works, because it is
+		// with nowhere to put it, the mouse still works, because it is
 		// positioned absolutely, and the keyboard silently does nothing.
 		go w.Hide()
 	}
@@ -312,9 +312,9 @@ func (w *WindowsUI) push(state State) {
 
 func tooltip(state State) string {
 	if state.Detail == "" {
-		return "Porthmoss — " + state.Title
+		return "Porthmoss, " + state.Title
 	}
-	return fmt.Sprintf("Porthmoss — %s", state.Title)
+	return fmt.Sprintf("Porthmoss, %s", state.Title)
 }
 
 func (w *WindowsUI) Stop() { systray.Quit() }

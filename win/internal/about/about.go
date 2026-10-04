@@ -3,7 +3,7 @@
 //
 // The numbers here mirror mac/Sources/PorthmossCore/About.swift, which is the
 // Mac side's single source for the same thing. `make check-version` fails the
-// build if the two drift apart — two halves of one product reporting different
+// build if the two drift apart, two halves of one product reporting different
 // versions is exactly the kind of thing nobody notices until a bug report
 // quotes both.
 package about
@@ -19,7 +19,7 @@ const (
 )
 
 // Summary is one line, for the log header and --version.
-const Summary = Name + " " + Version + " — " + Licence + " licence — " + Repository
+const Summary = Name + " " + Version + ", " + Licence + " licence, " + Repository
 
 // Credit is something the agent is built on and owes a mention to.
 type Credit struct {
@@ -52,7 +52,7 @@ var Acknowledgements = []Credit{
 // IsKnownLink reports whether a URL is one this project actually points at.
 //
 // The window's links all come from the constants above, so this can only ever
-// fail if something else is driving the binding — which is exactly the case
+// fail if something else is driving the binding, which is exactly the case
 // worth refusing. An agent that opens arbitrary URLs on request is a nicer
 // target than one that opens six.
 func IsKnownLink(url string) bool {

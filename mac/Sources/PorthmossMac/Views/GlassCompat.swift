@@ -4,7 +4,7 @@ import SwiftUI
 ///
 /// Shared visual language with Termoss: the same shims, so the two apps look
 /// like they came from the same place. Real Liquid Glass on macOS 26 and up, a
-/// frosted material panel below it — deliberately not an imitation of Liquid
+/// frosted material panel below it, deliberately not an imitation of Liquid
 /// Glass, but what a native app of that era actually looked like.
 
 @available(macOS 26.0, *)
@@ -73,7 +73,7 @@ enum Metrics {
     static let gap: CGFloat = 12
 }
 
-/// A rounded glass panel — the app's basic building block.
+/// A rounded glass panel, the app's basic building block.
 struct Panel<Content: View>: View {
     var tint: Color? = nil
     @ViewBuilder var content: Content

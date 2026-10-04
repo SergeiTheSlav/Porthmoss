@@ -73,7 +73,7 @@ Cmd->Ctrl and other modifier remapping before it gets here.
 `ENTER` places the pointer at exactly the position it carries. `MOUSE_MOVE`
 does **not**: the agent applies the *difference* since the previous message to
 wherever the pointer actually is. The PC's own mouse stays live throughout, and
-an absolute placement would undo whatever the user's hand just did — they nudge
+an absolute placement would undo whatever the user's hand just did, they nudge
 it, the next message snaps it back, and the cursor visibly teleports. Taking
 the difference means both mice move one cursor.
 
@@ -98,13 +98,13 @@ need stream ids and a scheduler, to save a user dragging a folder half a second.
     0x63 FILE_ABORT  str reason
 
 `flags` bit 0 marks a batch that came from the sender's clipboard rather than a
-drag. The receiver writes those files to disk either way — they have to go
-somewhere — but also puts them on its own clipboard once the last one arrives,
+drag. The receiver writes those files to disk either way, they have to go
+somewhere, but also puts them on its own clipboard once the last one arrives,
 so the user's next paste produces the files rather than nothing.
 
 `name` is chosen by the sender and so is attacker-controlled. The receiver must
-reduce it to a single path component — no separators, no `..`, no reserved DOS
-device name, no trailing dot or space — and must never overwrite an existing
+reduce it to a single path component, no separators, no `..`, no reserved DOS
+device name, no trailing dot or space, and must never overwrite an existing
 file. A rejected file is answered with ABORT and does not end the session.
 
 ## Session messages
@@ -126,5 +126,5 @@ link is alive whichever way control is flowing.
 
 While the Mac holds control it sends `PING` every 500 ms. If the agent sees no
 message for 2 s it releases every held key and button. If the Mac sees no
-`PONG` for 2 s it releases capture and returns the cursor to the Mac — losing
+`PONG` for 2 s it releases capture and returns the cursor to the Mac, losing
 Wi-Fi must never leave the user with no cursor on either machine.

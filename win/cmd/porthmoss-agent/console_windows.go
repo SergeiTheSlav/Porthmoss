@@ -43,8 +43,7 @@ func attachConsole() {
 
 // quietMDNSLogging silences the mDNS library's direct use of the standard
 // logger. It warns once per interface that cannot do multicast, which on a
-// Windows box means a line each for Hyper-V, WSL, VPN and Bluetooth adapters —
-// alarming to read, and every one of them is expected.
+// Windows box means a line each for Hyper-V, WSL, VPN and Bluetooth adapters, // alarming to read, and every one of them is expected.
 func quietMDNSLogging(verbose bool) {
 	if verbose {
 		log.SetPrefix("mdns: ")
@@ -58,8 +57,8 @@ func hasConsole() bool { return consoleAttached }
 
 // captureStderr points the process's real stderr at the log file.
 //
-// A Go runtime fatal — an access violation from a bad syscall, or a panic on a
-// goroutine we did not guard — is written to os.Stderr directly, not through
+// A Go runtime fatal, an access violation from a bad syscall, or a panic on a
+// goroutine we did not guard, is written to os.Stderr directly, not through
 // slog. In a -H windowsgui build that stderr is not connected to anything, so
 // those messages are exactly the ones that were lost when the agent "closed
 // for no reason". Redirecting the OS handle means the runtime writes its crash

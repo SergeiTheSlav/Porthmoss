@@ -202,7 +202,7 @@ struct CrossingStabilityTests {
         #expect(model.isRemote)
     }
 
-    /// The escape hatch must still work — but only after actually using the PC.
+    /// The escape hatch must still work, but only after actually using the PC.
     @Test("Returning still works once the cursor has moved into the PC")
     func returnStillWorksAfterUse() {
         let model = makeModel()

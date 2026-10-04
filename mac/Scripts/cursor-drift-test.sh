@@ -4,7 +4,7 @@
 # Swallowing a mouse event in a CGEventTap does not hold the cursor still: the
 # tap controls what applications receive, while the window server moves the
 # pointer from the HID stream regardless. This drove the cursor across the
-# screen in lockstep with the PC's, and only an end-to-end run catches it — the
+# screen in lockstep with the PC's, and only an end-to-end run catches it, the
 # crossing model on its own looks perfectly correct while it happens.
 #
 # Brings up a real agent and a real Mac client on loopback, pairs them, crosses
@@ -17,7 +17,7 @@ set -uo pipefail
 # wrong: two taps compete for the same events, and which one wins varies. Say
 # so plainly instead of failing intermittently.
 if pgrep -f "Porthmoss.app/Contents/MacOS/Porthmoss" > /dev/null 2>&1; then
-    echo "Porthmoss.app is running. Quit it first — two event taps compete," >&2
+    echo "Porthmoss.app is running. Quit it first, two event taps compete," >&2
     echo "and this test will pass or fail depending on which one wins." >&2
     exit 2
 fi
@@ -33,8 +33,8 @@ echo "Building…"
 swiftc -swift-version 5 -O "$ROOT/mac/Scripts/cursor-drift-probe.swift" -o "$WORK/probe" || exit 2
 
 MAC="$ROOT/mac/.build/debug/PorthmossMac"
-# Its own configuration, so the test pairs from scratch and — more importantly
-# — cannot disturb the user's. It drives this Mac with synthetic input, and
+# Its own configuration, so the test pairs from scratch and, more importantly
+#, cannot disturb the user's. It drives this Mac with synthetic input, and
 # synthetic keystrokes land in whatever has focus.
 export PORTHMOSS_CONFIG_DIR="$WORK/config"
 mkdir -p "$PORTHMOSS_CONFIG_DIR"
